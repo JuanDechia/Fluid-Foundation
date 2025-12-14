@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: saas_foundation_test
+    ports:
+      - '5433:5432' # Map to a non-standard port to avoid conflicts with local dev DB
+    healthcheck:
+      # This command checks if the database is ready to accept connections.
+      # The `npm run test:start-env` script waits for this to pass before proceeding.
+      test: ["CMD-SHELL", "pg_isready -U testuser -d saas_foundation_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 10

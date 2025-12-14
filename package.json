@@ -1,0 +1,19 @@
+{
+    "name": "saas-fluid-monorepo",
+    "packageManager": "npm@11.6.2",
+    "private": true,
+    "scripts": {
+        "build": "turbo run build",
+        "dev": "turbo run dev",
+        "lint": "turbo run lint",
+        "test": "turbo run test",
+        "clean": "turbo run clean"
+    },
+    "devDependencies": {
+        "turbo": "latest"
+    },
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ]
+}

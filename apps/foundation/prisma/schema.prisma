@@ -1,0 +1,52 @@
+// This is your Database Schema (The Blueprint)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// GLOBAL MODELS (Shared, not Tenant-specific)
+model User {
+  id        String   @id
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String
+  entity         String
+  entityId       String
+  actorId        String
+  organizationId String
+  createdAt      DateTime @default(now())
+}
+
+// TENANT MODELS (Data that belongs to a specific customer)
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  // FIX: Added slug field to prevent crashes
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // FIX: Added support for Soft Deletes
+  deletedAt DateTime?
+
+  projects  Project[]
+}
+
+model Project {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+}
