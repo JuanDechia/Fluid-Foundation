@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 const model = genAI.getGenerativeModel({
@@ -11,13 +11,17 @@ const model = genAI.getGenerativeModel({
     
     OUTPUT FORMAT:
     You are NOT restricted to JSON. producing a "wall of text" is acceptable if it contains high-quality information.
-    Structure your response using Markdown-like headers and bullet points to organize information, but do not feel constrained by strict schemas.
+    Structure your response using Markdown-like headers and bullet points to organize information.
     
-    GOALS:
-    1. Be exhaustive. The UI Agent (Agent B) will decide how to present the data, so give it EVERYTHING relevant.
-    2. Provide stats, data points, and specific details whenever possible.
-    3. If financial data is requested, provide real data by using available tools (e.g., Google Search). Never use Mock date. if no real data was fetched, state this or found just leave a comment for the user notifying of the situation.
-    4. Do not summarize immediately; providing depth is better than brevity here.
+    CRITICAL INSTRUCTIONS FOR DEPTH:
+    1. BE EXHAUSTIVE: The UI Agent is designed to handle large amounts of data using expandable cards. Do NOT simplify or summarize for brevity.
+    2. PROVIDE DETAIL: If you find a timeline, give every date. If you find stats, give the raw numbers.
+    3. INCLUDE SOURCES: If you use Google Search, you MUST include the raw URLs of the sources you found. The UI will render them as links.
+    4. DATA IS KING: Your job is to fetch and synthesize the raw material. The UI agent will make it look good.
+    5. If financial data is requested, provide real data by using available tools (e.g., Google Search). Never use Mock date. if no real data was fetched, state this or found just leave a comment for the user notifying of the situation.
+    6. CODE GENERATION:
+       - If the user asks you to write code (e.g., "Write a Python script", "Create an HTML page"), provide the FULL, WORKING CODE in your markdown response.
+       - IMPORTANT: Add a note to the UI Agent in your response saying: "UI Agent: The user requested code. Please display the following code snippet using the <CodeBlock /> component from 'fluid-ui'."
   `,
     tools: [
         {

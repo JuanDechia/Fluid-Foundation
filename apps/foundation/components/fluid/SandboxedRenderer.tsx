@@ -1,3 +1,4 @@
+'use client';
 import React, { useEffect, useRef } from 'react';
 
 interface SandboxedRendererProps {
@@ -93,25 +94,82 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
           <div id="root"></div>
           
           <script type="module">
-            import React from 'https://esm.sh/react@18.2.0';
+            import React, { useState } from 'https://esm.sh/react@18.2.0';
             import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
             import * as Lucide from 'https://esm.sh/lucide-react@0.344.0?external=react';
+            import { Copy, Check } from 'https://esm.sh/lucide-react@0.344.0?external=react';
             import * as Recharts from 'https://esm.sh/recharts@2.12.0?external=react';
 
             const DATA_CONTEXT = ${JSON.stringify(data)};
             
-            const RAW_CODE = \`${cleanCode(code).replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+            // Critical Fix: Escape backticks, dollar signs, AND closing script tags
+            // If the user's code contains </script>, it breaks the parent script block
+            const RAW_CODE = \`${cleanCode(code)
+        .replace(/`/g, '\\`')
+        .replace(/\$/g, '\\$')
+        .replace(/<\/script>/g, '<\\/script>')}\`;
+
+            // --- CodeBlock Component Definition (Injected) ---
+            const CODE_BLOCK_SOURCE = \`
+                const CodeBlock = ({ code, language = 'text' }) => {
+                    const [copied, setCopied] = React.useState(false);
+
+                    const handleCopy = () => {
+                        navigator.clipboard.writeText(code);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                    };
+
+                    return (
+                        <div className="rounded-lg overflow-hidden border border-slate-700 bg-slate-900 my-4 shadow-sm group">
+                            <div className="flex items-center justify-between px-4 py-2 bg-slate-800 border-b border-slate-700">
+                                <span className="text-xs font-mono text-slate-400 uppercase">{language}</span>
+                                <button 
+                                    onClick={handleCopy}
+                                    className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+                                    title="Copy code"
+                                >
+                                    {copied ? <Lucide.Check size={14} className="text-green-500" /> : <Lucide.Copy size={14} />}
+                                </button>
+                            </div>
+                            <div className="p-4 overflow-x-auto">
+                                <pre className="font-mono text-xs text-slate-300 whitespace-pre">
+                                    {code}
+                                </pre>
+                            </div>
+                        </div>
+                    );
+                };
+                
+                // Export it so we can grab it from the execution scope
+                module.exports = { CodeBlock };
+            \`;
 
             // Shim for 'require' to allow idiomatic React code
             const require = (moduleName) => {
                 if (moduleName === 'react') return React;
                 if (moduleName === 'lucide-react') return Lucide;
                 if (moduleName === 'recharts') return Recharts;
+                if (moduleName === 'fluid-ui') return { CodeBlock: window.CodeBlockComponent }; // We will register this globally or in scope
                 throw new Error(\`Cannot find module '\${moduleName}'\`);
             };
 
             async function run() {
               try {
+                // 0. Pre-compile CodeBlock
+                // We compile it once and store the component reference
+                const codeBlockTranspiled = Babel.transform(CODE_BLOCK_SOURCE, {
+                    presets: ['env', 'react']
+                }).code;
+                
+                const codeBlockFactory = new Function('React', 'Lucide', 'module', 'exports', codeBlockTranspiled + "\\nreturn module.exports.CodeBlock;");
+                const codeBlockModule = { exports: {} };
+                const CodeBlockComponent = codeBlockFactory(React, Lucide, codeBlockModule, codeBlockModule.exports);
+                
+                // Store it for the require shim
+                window.CodeBlockComponent = CodeBlockComponent;
+
+
                 // 1. Transpile the user's code
                 // We use 'env' preset to transform imports to CommonJS (require quotes)
                 const transpiled = Babel.transform(RAW_CODE, { 

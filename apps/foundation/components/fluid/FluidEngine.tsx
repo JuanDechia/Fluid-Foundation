@@ -1,11 +1,21 @@
-import React, { useState, useEffect } from 'react';
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { Send, ArrowLeft, ArrowRight, RotateCcw, Plus, MessageSquare, Trash2, AlertTriangle, Wrench, Sparkles } from 'lucide-react';
 import SandboxedRenderer from './SandboxedRenderer';
-import { HistoryManager, type FluidState } from '../lib/history_manager';
-import { callLogicAgent, type ChatMessage } from '../agents/agent_logic';
-import { callUIAgent } from '../agents/agent_ui';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db/db';
+import { HistoryManager, type FluidState } from '@/lib/fluid/history_manager';
+import { callLogicAgent, type ChatMessage } from '@/lib/fluid/agents/agent_logic';
+import { callUIAgent } from '@/lib/fluid/agents/agent_ui';
+import {
+    getConversations,
+    createConversation,
+    deleteConversation as deleteConvAction,
+    getMessages,
+    addMessage,
+    saveState,
+    getLatestState,
+    type SerializedConversation
+} from '@/app/editor/actions';
 
 const historyManager = new HistoryManager();
 
@@ -20,20 +30,35 @@ const FluidEngine: React.FC = () => {
     const [refineInput, setRefineInput] = useState('');
 
     // Persistence State
-    const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
-    const conversations = useLiveQuery(() => db.conversations.orderBy('updatedAt').reverse().toArray());
+    // CHANGED: IDs are now strings (CUIDs) not numbers
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const [conversations, setConversations] = useState<SerializedConversation[]>([]);
 
     // Chat History for Agent A
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-
     const [showDebug, setShowDebug] = useState(false);
+
+    // Load Conversations List
+    const refreshConversations = useCallback(async () => {
+        try {
+            const list = await getConversations();
+            setConversations(list);
+        } catch (e) {
+            console.error("Failed to load conversations", e);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshConversations();
+    }, [refreshConversations]);
 
     // Initialize/Load Conversation
     useEffect(() => {
         const loadConversation = async () => {
             if (activeConversationId) {
                 // Load Messages
-                const messages = await db.messages.where('conversationId').equals(activeConversationId).sortBy('timestamp');
+                const messages = await getMessages(activeConversationId);
+
                 const formattedHistory: ChatMessage[] = messages.map(m => ({
                     role: m.role as 'user' | 'model',
                     parts: m.content
@@ -42,20 +67,14 @@ const FluidEngine: React.FC = () => {
                 setLogs(messages.map(m => `${m.role === 'user' ? 'User' : 'Agent'}: ${m.content.slice(0, 50)}...`));
 
                 // Load Latest State
-                // We only store states when UI is generated. 
-                // Getting the last state for this conversation.
-                const lastStateEntry = await db.fluidStates
-                    .where('conversationId')
-                    .equals(activeConversationId)
-                    .reverse()
-                    .first();
+                const lastStateEntry = await getLatestState(activeConversationId);
 
                 if (lastStateEntry) {
                     const restoredState: FluidState = {
-                        id: lastStateEntry.id,
+                        id: crypto.randomUUID(), // State ID is transient for history manager unless we want to link exact DB IDs
                         uiConfig: lastStateEntry.uiConfig,
-                        dataContext: lastStateEntry.dataContext,
-                        timestamp: lastStateEntry.timestamp
+                        dataContext: lastStateEntry.dataContext as any,
+                        timestamp: new Date(lastStateEntry.timestamp).getTime()
                     };
                     setCurrentState(restoredState);
                     historyManager.reset(restoredState);
@@ -104,13 +123,7 @@ const FluidEngine: React.FC = () => {
                 timestamp: Date.now()
             };
 
-            await db.fluidStates.add({
-                id: newState.id,
-                conversationId: activeConversationId!,
-                uiConfig: newState.uiConfig,
-                dataContext: newState.dataContext,
-                timestamp: newState.timestamp
-            });
+            await saveState(activeConversationId!, newState.uiConfig, newState.dataContext);
 
             historyManager.push(newState);
             setCurrentState(newState);
@@ -137,36 +150,21 @@ const FluidEngine: React.FC = () => {
             // 0. Ensure Conversation Exists
             let conversationId = activeConversationId;
             if (!conversationId) {
-                conversationId = await db.conversations.add({
-                    title: message.slice(0, 30) + (message.length > 30 ? '...' : ''),
-                    createdAt: new Date(),
-                    updatedAt: new Date()
-                }) as number;
+                const title = message.slice(0, 30) + (message.length > 30 ? '...' : '');
+                conversationId = await createConversation(title);
                 setActiveConversationId(conversationId);
-            } else {
-                // Update timestamp
-                await db.conversations.update(conversationId, { updatedAt: new Date() });
+                refreshConversations(); // Update list
             }
 
             // Save User Message
-            await db.messages.add({
-                conversationId,
-                role: 'user',
-                content: message,
-                timestamp: new Date()
-            });
+            await addMessage(conversationId, 'user', message);
 
             // 1. Logic Agent (Agent A)
             addLog('Agent A: Processing...');
             const logicResponseText = await callLogicAgent(message, chatHistory);
 
             // Save Agent Message
-            await db.messages.add({
-                conversationId,
-                role: 'model',
-                content: logicResponseText,
-                timestamp: new Date()
-            });
+            await addMessage(conversationId, 'model', logicResponseText);
 
             // Update Local History
             const newHistory: ChatMessage[] = [
@@ -195,13 +193,7 @@ const FluidEngine: React.FC = () => {
                 timestamp: Date.now()
             };
 
-            await db.fluidStates.add({
-                id: newState.id,
-                conversationId,
-                uiConfig: newState.uiConfig,
-                dataContext: newState.dataContext,
-                timestamp: newState.timestamp
-            });
+            await saveState(conversationId, newState.uiConfig, newState.dataContext);
 
             historyManager.push(newState);
             setCurrentState(newState);
@@ -215,13 +207,16 @@ const FluidEngine: React.FC = () => {
         }
     };
 
-    const deleteConversation = async (e: React.MouseEvent, id: number) => {
+    const deleteConversation = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         if (confirm('Delete this conversation?')) {
-            await db.conversations.delete(id);
-            await db.messages.where('conversationId').equals(id).delete();
-            await db.fluidStates.where('conversationId').equals(id).delete();
-            if (activeConversationId === id) setActiveConversationId(null);
+            try {
+                await deleteConvAction(id);
+                if (activeConversationId === id) setActiveConversationId(null);
+                refreshConversations();
+            } catch (error) {
+                alert('Failed to delete conversation');
+            }
         }
     };
 
@@ -257,7 +252,7 @@ const FluidEngine: React.FC = () => {
                                 <span className="truncate max-w-[180px]">{conv.title}</span>
                             </div>
                             <button
-                                onClick={(e) => deleteConversation(e, conv.id!)}
+                                onClick={(e) => deleteConversation(e, conv.id)}
                                 className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-1"
                             >
                                 <Trash2 size={12} />

@@ -13,7 +13,14 @@
         "turbo": "latest"
     },
     "workspaces": [
-        "apps/*",
+        "apps/foundation",
         "packages/*"
-    ]
+    ],
+    "dependencies": {
+        "@clerk/nextjs": "^6.36.2"
+    },
+    "overrides": {
+        "react": "18.3.1",
+        "react-dom": "18.3.1"
+    }
 }

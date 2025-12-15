@@ -13,7 +13,7 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
@@ -39,6 +39,7 @@
   "exclude": [
     "node_modules",
     "vite.config.ts", // Exclude Vite config to avoid missing plugin type errors
-    "playwright.config.ts" // Exclude Playwright config from app tsc run
+    "playwright.config.ts", // Exclude Playwright config from app tsc run
+    "vitest.config.ts"
   ]
 }

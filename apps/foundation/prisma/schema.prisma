@@ -38,15 +38,52 @@ model Organization {
   deletedAt DateTime?
 
   projects  Project[]
+  fluidConversations FluidConversation[]
 }
 
 model Project {
   id             String       @id @default(cuid())
   name           String
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
+}
+
+// FLUID MODELS (AI Editor)
+model FluidConversation {
+  id             String          @id @default(cuid())
+  title          String
+  userId         String
+  organizationId String?
+  // Relation to Organization ensures multitenancy
+  organization   Organization?   @relation(fields: [organizationId], references: [id])
+
+  
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+  
+  messages       FluidMessage[]
+  states         FluidState[]
+}
+
+model FluidMessage {
+  id             String            @id @default(cuid())
+  conversationId String
+  conversation   FluidConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String            // 'user' | 'model' | 'system'
+  content        String            // Use Text type implicitly in Postgres
+  timestamp      DateTime          @default(now())
+}
+
+model FluidState {
+  id             String            @id @default(cuid())
+  conversationId String
+  conversation   FluidConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  uiConfig       String            // React code string
+  dataContext    Json              // JSON data from Agent A
+  timestamp      DateTime          @default(now())
 }
