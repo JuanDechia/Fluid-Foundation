@@ -42,19 +42,22 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
               }, '*');
             };
 
-            const originalConsoleError = console.error;
-            console.error = function(...args) {
-              originalConsoleError.apply(console, args);
-              // Simple serialization of args
-              const message = args.map(a => 
-                typeof a === 'object' ? JSON.stringify(a) : String(a)
-              ).join(' ');
-              
-              window.parent.postMessage({ 
-                type: 'SANDBOX_CONSOLE_ERROR', 
-                payload: { message } 
-              }, '*');
-            };
+            // Prevent redeclaration error in strict mode
+            if (!window.originalConsoleError) {
+              window.originalConsoleError = console.error;
+              console.error = function(...args) {
+                window.originalConsoleError.apply(console, args);
+                // Simple serialization of args
+                const message = args.map(a => 
+                  typeof a === 'object' ? JSON.stringify(a) : String(a)
+                ).join(' ');
+                
+                window.parent.postMessage({ 
+                  type: 'SANDBOX_CONSOLE_ERROR', 
+                  payload: { message } 
+                }, '*');
+              };
+            }
           </script>
           
           <script type="importmap">
@@ -100,14 +103,10 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
             import { Copy, Check } from 'https://esm.sh/lucide-react@0.344.0?external=react';
             import * as Recharts from 'https://esm.sh/recharts@2.12.0?external=react';
 
-            const DATA_CONTEXT = ${JSON.stringify(data)};
+            const DATA_CONTEXT = ${JSON.stringify(data).replace(/<\/script>/g, '<\\/script>')};
             
-            // Critical Fix: Escape backticks, dollar signs, AND closing script tags
-            // If the user's code contains </script>, it breaks the parent script block
-            const RAW_CODE = \`${cleanCode(code)
-        .replace(/`/g, '\\`')
-        .replace(/\$/g, '\\$')
-        .replace(/<\/script>/g, '<\\/script>')}\`;
+            // Critical Fix: Use JSON.stringify for safe injection + escape script tags
+            const RAW_CODE = ${JSON.stringify(cleanCode(code)).replace(/<\/script>/g, '<\\/script>')};
 
             // --- CodeBlock Component Definition (Injected) ---
             const CODE_BLOCK_SOURCE = \`

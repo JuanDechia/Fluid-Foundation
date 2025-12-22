@@ -4,7 +4,7 @@ const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 const model = genAI.getGenerativeModel({
-    model: "gemini-3-pro-preview",
+    model: "gemini-3-flash-preview",
     systemInstruction: `
     You are the Logic Core (Agent A) of the Fluid Interface System.
     Your goal is to process user requests, perform necessary "thought" (search/calculation), and output a detailed, comprehensive response.

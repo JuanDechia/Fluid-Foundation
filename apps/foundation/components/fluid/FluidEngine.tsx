@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Send, ArrowLeft, ArrowRight, RotateCcw, Plus, MessageSquare, Trash2, AlertTriangle, Wrench, Sparkles } from 'lucide-react';
+import { Send, ArrowLeft, ArrowRight, RotateCcw, Plus, MessageSquare, Trash2, AlertTriangle, Wrench, Sparkles, Menu } from 'lucide-react';
 import SandboxedRenderer from './SandboxedRenderer';
 import { HistoryManager, type FluidState } from '@/lib/fluid/history_manager';
 import { callLogicAgent, type ChatMessage } from '@/lib/fluid/agents/agent_logic';
@@ -23,7 +23,7 @@ const FluidEngine: React.FC = () => {
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentState, setCurrentState] = useState<FluidState | null>(null);
-    const [logs, setLogs] = useState<string[]>([]);
+    const [logs, setLogs] = useState<string[]>([]); // Keep logs for system messages
     const [runtimeError, setRuntimeError] = useState<string | null>(null);
     const [isRefining, setIsRefining] = useState(false);
     const [showRefineInput, setShowRefineInput] = useState(false);
@@ -37,6 +37,10 @@ const FluidEngine: React.FC = () => {
     // Chat History for Agent A
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [showDebug, setShowDebug] = useState(false);
+
+    // UI State
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [collapsedWidth, setCollapsedWidth] = useState(320); // Width of sidebar
 
     // Load Conversations List
     const refreshConversations = useCallback(async () => {
@@ -64,7 +68,7 @@ const FluidEngine: React.FC = () => {
                     parts: m.content
                 }));
                 setChatHistory(formattedHistory);
-                setLogs(messages.map(m => `${m.role === 'user' ? 'User' : 'Agent'}: ${m.content.slice(0, 50)}...`));
+                setLogs([]); // Clear legacy logs
 
                 // Load Latest State
                 const lastStateEntry = await getLatestState(activeConversationId);
@@ -144,7 +148,13 @@ const FluidEngine: React.FC = () => {
         const message = input;
         setInput('');
         setIsProcessing(true);
-        addLog(`User: ${message}`);
+
+        // Optimistic UI update
+        const tempHistory: ChatMessage[] = [
+            ...chatHistory,
+            { role: 'user', parts: message }
+        ];
+        setChatHistory(tempHistory);
 
         try {
             // 0. Ensure Conversation Exists
@@ -160,16 +170,15 @@ const FluidEngine: React.FC = () => {
             await addMessage(conversationId, 'user', message);
 
             // 1. Logic Agent (Agent A)
-            addLog('Agent A: Processing...');
-            const logicResponseText = await callLogicAgent(message, chatHistory);
+            // addLog('Agent A: Processing...');
+            const logicResponseText = await callLogicAgent(message, tempHistory);
 
             // Save Agent Message
             await addMessage(conversationId, 'model', logicResponseText);
 
             // Update Local History
             const newHistory: ChatMessage[] = [
-                ...chatHistory,
-                { role: 'user', parts: message },
+                ...tempHistory,
                 { role: 'model', parts: logicResponseText }
             ];
             setChatHistory(newHistory);
@@ -181,7 +190,7 @@ const FluidEngine: React.FC = () => {
                 : logicResponseText;
 
             // 3. UI Agent (Agent B)
-            addLog('Agent B: Generating Interface...');
+            // addLog('Agent B: Generating Interface...');
             const previousCode = currentState?.uiConfig;
             const uiResultCode = await callUIAgent(combinedContext, previousCode);
 
@@ -197,11 +206,13 @@ const FluidEngine: React.FC = () => {
 
             historyManager.push(newState);
             setCurrentState(newState);
-            addLog('System: Render Complete');
+            // addLog('System: Render Complete');
 
         } catch (e) {
             addLog(`Error: ${e}`);
             console.error(e);
+            const errorHistory = [...chatHistory, { role: 'user', parts: message }, { role: 'model', parts: `Error: ${e}` }] as ChatMessage[];
+            setChatHistory(errorHistory);
         } finally {
             setIsProcessing(false);
         }
@@ -225,76 +236,166 @@ const FluidEngine: React.FC = () => {
         if (state) setCurrentState({ ...state });
     };
 
+    // System logs still useful for debug/errors, but hidden from main chat flow usually
     const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
+    // Auto-scroll chat to bottom
+    const chatContainerRef = React.useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [chatHistory, isProcessing, logs]);
+
 
     return (
-        <div className="flex h-screen bg-black text-white overflow-hidden font-sans">
+        <div className="flex h-full bg-black text-white overflow-hidden font-sans">
             {/* Sidebar */}
-            <div className="w-80 border-r border-slate-800 flex flex-col bg-slate-950">
-                <div className="p-4 border-b border-slate-800 font-bold text-lg bg-slate-900 flex justify-between items-center">
-                    <span>Fluid Interface</span>
-                    <button onClick={() => setActiveConversationId(null)} className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded flex items-center gap-1">
-                        <Plus size={14} /> New
+            <div className="w-[350px] border-r border-slate-800 flex flex-col bg-slate-950 flex-shrink-0 relative z-20">
+
+                {/* Header Actions */}
+                <div className="p-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center z-30 relative">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                            className={`p-1.5 rounded hover:bg-slate-800 transition-colors ${isHistoryOpen ? 'text-blue-400' : 'text-slate-400'}`}
+                            title="Toggle History"
+                        >
+                            <Menu size={18} />
+                        </button>
+                        <span className="font-bold text-sm text-slate-200">Fluid Interface</span>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setActiveConversationId(null);
+                            setIsHistoryOpen(false);
+                        }}
+                        className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-medium"
+                    >
+                        <Plus size={14} /> New Chat
                     </button>
                 </div>
 
-                {/* Conversations List */}
-                <div className="h-1/3 border-b border-slate-800 overflow-y-auto">
-                    <div className="p-2 text-xs font-bold text-slate-500 uppercase tracking-wider">History</div>
-                    {conversations?.map(conv => (
-                        <div
-                            key={conv.id}
-                            onClick={() => setActiveConversationId(conv.id)}
-                            className={`p-3 text-sm cursor-pointer hover:bg-slate-900 flex justify-between items-center group ${activeConversationId === conv.id ? 'bg-slate-900 border-l-2 border-blue-500' : 'text-slate-400'}`}
-                        >
-                            <div className="flex items-center gap-2 truncate">
-                                <MessageSquare size={14} className="opacity-50" />
-                                <span className="truncate max-w-[180px]">{conv.title}</span>
-                            </div>
-                            <button
-                                onClick={(e) => deleteConversation(e, conv.id)}
-                                className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-1"
+                {/* Drawer: History Panel */}
+                <div
+                    className={`absolute top-[57px] left-0 bottom-0 w-full bg-slate-900/95 backdrop-blur-sm z-20 transition-transform duration-300 ease-in-out border-r border-slate-800/50 flex flex-col ${isHistoryOpen ? 'translate-x-0' : '-translate-x-full'
+                        }`}
+                >
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                        <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-2 mt-2">Recent Sessions</div>
+                        {conversations?.map(conv => (
+                            <div
+                                key={conv.id}
+                                onClick={() => {
+                                    setActiveConversationId(conv.id);
+                                    setIsHistoryOpen(false); // Close drawer on selection
+                                }}
+                                className={`px-4 py-3 mb-1 text-sm cursor-pointer hover:bg-slate-800 rounded-lg flex justify-between items-center group transition-all ${activeConversationId === conv.id ? 'bg-slate-800 text-blue-400' : 'text-slate-400'}`}
                             >
-                                <Trash2 size={12} />
-                            </button>
-                        </div>
-                    ))}
-                    {conversations?.length === 0 && (
-                        <div className="p-4 text-center text-slate-600 text-xs italic">No history yet</div>
-                    )}
+                                <div className="flex flex-col gap-0.5 overflow-hidden">
+                                    <span className="truncate font-medium">{conv.title}</span>
+                                    <span className="text-[10px] opacity-60">{new Date(conv.updatedAt).toLocaleDateString()}</span>
+                                </div>
+                                <button
+                                    onClick={(e) => deleteConversation(e, conv.id)}
+                                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-1.5 rounded hover:bg-slate-700 transition-all"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                        ))}
+                        {conversations?.length === 0 && (
+                            <div className="p-8 text-center text-slate-600 text-xs italic">
+                                No history yet
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Current Chat Logs */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 text-sm font-mono text-slate-400 bg-slate-950/50">
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Logs</div>
-                    {logs.length === 0 && <div className="text-slate-700 italic">Start a conversation...</div>}
-                    {logs.map((log, i) => (
-                        <div key={i} className="break-words border-b border-slate-900 pb-1">{log}</div>
-                    ))}
-                    {isProcessing && <div className="text-blue-400 animate-pulse">Thinking...</div>}
+                {/* Overlay Background for Drawer */}
+                {isHistoryOpen && (
+                    <div
+                        className="absolute inset-0 bg-black/50 z-10 backdrop-blur-[1px]"
+                        onClick={() => setIsHistoryOpen(false)}
+                    />
+                )}
+
+                {/* Current Chat Area */}
+                <div className="flex-1 flex flex-col min-h-0 relative bg-slate-950">
+                    <div className="absolute inset-0 overflow-y-auto p-4 space-y-4 custom-scrollbar" ref={chatContainerRef}>
+                        {chatHistory.length === 0 && (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-700 space-y-2 opacity-50">
+                                <Sparkles size={32} />
+                                <p className="text-sm">Start a new journey</p>
+                            </div>
+                        )}
+
+                        {chatHistory.map((msg, i) => (
+                            <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                <div
+                                    className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                                        ? 'bg-blue-600 text-white rounded-br-sm'
+                                        : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700'
+                                        }`}
+                                >
+                                    <div className="whitespace-pre-wrap">{msg.parts}</div>
+                                </div>
+                                <span className="text-[10px] text-slate-600 mt-1 px-1">
+                                    {msg.role === 'user' ? 'You' : 'Fluid Agent'}
+                                </span>
+                            </div>
+                        ))}
+
+                        {/* Processing Indicators / System Logs displayed inline when relevant */}
+                        {isProcessing && (
+                            <div className="flex items-start">
+                                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-slate-400 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                                    <span>Thinking...</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* System Logs (Optional, can be hidden or shown in a debug mode, implementing simple version here for errors) */}
+                        {logs.length > 0 && showDebug && (
+                            <div className="mt-4 pt-4 border-t border-slate-900 space-y-1">
+                                {logs.map((log, i) => (
+                                    <div key={`log-${i}`} className="text-[10px] font-mono text-slate-600">{log}</div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Input Area */}
-                <div className="p-4 bg-slate-900 border-t border-slate-800">
-                    <div className="flex items-end gap-2 bg-slate-800 rounded-lg p-2 border border-slate-700 focus-within:ring-2 ring-blue-500">
+                <div className="p-4 bg-slate-900 border-t border-slate-800 z-10">
+                    <div className="flex items-end gap-2 bg-slate-800/50 rounded-xl p-2 border border-slate-700/50 focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500 transition-all shadow-lg">
                         <textarea
-                            className="bg-transparent border-none outline-none flex-1 text-white placeholder-slate-500 resize-none min-h-[44px] max-h-32 py-2"
+                            className="bg-transparent border-none outline-none flex-1 text-white placeholder-slate-500 resize-none py-2 px-1 text-sm custom-scrollbar"
                             value={input}
                             onChange={e => setInput(e.target.value)}
+                            onInput={(e) => {
+                                const target = e.target as HTMLTextAreaElement;
+                                target.style.height = 'auto';
+                                target.style.height = `${Math.min(target.scrollHeight, 240)}px`;
+                            }}
                             onKeyDown={e => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();
                                     handleSend();
                                 }
                             }}
-                            placeholder="Ask fluidly..."
+                            placeholder="Type a message..."
                             disabled={isProcessing}
-                            rows={1}
+                            style={{
+                                minHeight: '44px',
+                                maxHeight: '240px',
+                                height: input ? 'auto' : '44px'
+                            }}
                         />
                         <button
                             onClick={handleSend}
-                            disabled={isProcessing}
-                            className="p-2 mb-0.5 bg-blue-600 rounded-md hover:bg-blue-500 transition-colors disabled:opacity-50"
+                            disabled={isProcessing || !input.trim()}
+                            className="p-2.5 mb-0.5 bg-blue-600 rounded-lg hover:bg-blue-500 text-white transition-all disabled:opacity-30 disabled:hover:bg-blue-600 shadow-md transform active:scale-95 flex-shrink-0"
                         >
                             <Send size={16} />
                         </button>

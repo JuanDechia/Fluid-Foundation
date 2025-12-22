@@ -4,8 +4,8 @@ const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 const model = genAI.getGenerativeModel({
-    model: "gemini-3-pro-preview",
-    systemInstruction: `
+  model: "gemini-3-flash-preview",
+  systemInstruction: `
     You are the UI Renderer (Agent B) of the Fluid Interface System.
     Your input is a RAW TEXT string containing information, data, and analysis.
     Your output is a SINGLE, SELF-CONTAINED React Functional Component code string.
@@ -92,66 +92,66 @@ const model = genAI.getGenerativeModel({
  * This is a safety net for when the AI doesn't follow the quote rules.
  */
 function sanitizeGeneratedCode(code: string): string {
-    let sanitized = code;
+  let sanitized = code;
 
-    // Fix: .split('\n') patterns that might have actual newlines
-    sanitized = sanitized.replace(/\.split\(\s*(['"])\r?\n\s*\1\s*\)/g, ".split($1\\n$1)");
+  // Fix: .split('\n') patterns that might have actual newlines
+  sanitized = sanitized.replace(/\.split\(\s*(['"])\r?\n\s*\1\s*\)/g, ".split($1\\n$1)");
 
-    // Attempt to detect and fix unescaped quotes in object property strings
-    // This regex looks for patterns like: key: "text "quoted" more text"
-    // and converts them to use backticks: key: `text "quoted" more text`
-    // 
-    // Strategy: Find property assignments where the value string contains unescaped quotes
-    // Pattern: propertyName: "content with "inner" quotes"
-    // 
-    // This is a heuristic approach - we look for common patterns that indicate broken strings
+  // Attempt to detect and fix unescaped quotes in object property strings
+  // This regex looks for patterns like: key: "text "quoted" more text"
+  // and converts them to use backticks: key: `text "quoted" more text`
+  // 
+  // Strategy: Find property assignments where the value string contains unescaped quotes
+  // Pattern: propertyName: "content with "inner" quotes"
+  // 
+  // This is a heuristic approach - we look for common patterns that indicate broken strings
 
-    // Pattern 1: Look for lines that have an odd number of unescaped double quotes
-    // after a property assignment (this often indicates broken strings)
-    const lines = sanitized.split('\n');
-    const fixedLines = lines.map((line, index) => {
-        // Skip lines that are likely template literals or properly escaped
-        if (line.includes('`') || line.includes('\\"')) {
-            return line;
-        }
+  // Pattern 1: Look for lines that have an odd number of unescaped double quotes
+  // after a property assignment (this often indicates broken strings)
+  const lines = sanitized.split('\n');
+  const fixedLines = lines.map((line, index) => {
+    // Skip lines that are likely template literals or properly escaped
+    if (line.includes('`') || line.includes('\\"')) {
+      return line;
+    }
 
-        // Look for property patterns like: key: "value"
-        // Check if there are more than 2 double quotes (indicates nested quotes issue)
-        const propertyMatch = line.match(/^(\s*)(\w+):\s*"(.*)"\s*,?\s*$/);
-        if (propertyMatch) {
-            const [, indent, key, content] = propertyMatch;
-            const quoteCount = (content.match(/"/g) || []).length;
+    // Look for property patterns like: key: "value"
+    // Check if there are more than 2 double quotes (indicates nested quotes issue)
+    const propertyMatch = line.match(/^(\s*)(\w+):\s*"(.*)"\s*,?\s*$/);
+    if (propertyMatch) {
+      const [, indent, key, content] = propertyMatch;
+      const quoteCount = (content.match(/"/g) || []).length;
 
-            // If there are unescaped quotes inside, convert to backtick string
-            if (quoteCount > 0) {
-                const hasTrailingComma = line.trimEnd().endsWith(',');
-                const comma = hasTrailingComma ? ',' : '';
-                return `${indent}${key}: \`${content}\`${comma}`;
-            }
-        }
+      // If there are unescaped quotes inside, convert to backtick string
+      if (quoteCount > 0) {
+        const hasTrailingComma = line.trimEnd().endsWith(',');
+        const comma = hasTrailingComma ? ',' : '';
+        return `${indent}${key}: \`${content}\`${comma}`;
+      }
+    }
 
-        return line;
-    });
+    return line;
+  });
 
-    sanitized = fixedLines.join('\n');
+  sanitized = fixedLines.join('\n');
 
-    return sanitized;
+  return sanitized;
 }
 
 export async function callUIAgent(dataContext: any, previousCode?: string, feedback?: string): Promise<string> {
-    if (!API_KEY) {
-        throw new Error("VITE_GEMINI_API_KEY is not set");
-    }
+  if (!API_KEY) {
+    throw new Error("VITE_GEMINI_API_KEY is not set");
+  }
 
-    try {
-        // dataContext is now likely a large string, but we wrap it to be sure
-        const prompt = typeof dataContext === 'string' ? dataContext : JSON.stringify(dataContext, null, 2);
+  try {
+    // dataContext is now likely a large string, but we wrap it to be sure
+    const prompt = typeof dataContext === 'string' ? dataContext : JSON.stringify(dataContext, null, 2);
 
-        // Construct the prompt
-        let fullInstruction = `Render this content:\n${prompt}`;
+    // Construct the prompt
+    let fullInstruction = `Render this content:\n${prompt}`;
 
-        if (previousCode) {
-            fullInstruction += `\n\nIMPORTANT: Here is the PREVIOUS UI CODE you generated. You MUST use this as a starting point.
+    if (previousCode) {
+      fullInstruction += `\n\nIMPORTANT: Here is the PREVIOUS UI CODE you generated. You MUST use this as a starting point.
             
             PREVIOUS CODE:
             ${previousCode}
@@ -173,10 +173,10 @@ export async function callUIAgent(dataContext: any, previousCode?: string, feedb
             REMINDER - STRING SYNTAX:
             - Use BACKTICKS for strings containing quotes: \`He said "hello"\`
             - Or escape quotes: "He said \\"hello\\""`;
-        }
+    }
 
-        if (feedback) {
-            fullInstruction += `\n\nCRITICAL USER FEEDBACK / ERROR LOG:
+    if (feedback) {
+      fullInstruction += `\n\nCRITICAL USER FEEDBACK / ERROR LOG:
             "${feedback}"
             
             PRIORITY INSTRUCTION:
@@ -184,20 +184,20 @@ export async function callUIAgent(dataContext: any, previousCode?: string, feedb
             - You MUST address this feedback immediately.
             - If this is an error log, ANALYZE the error and FIX the code.
             - If this is a style request, apply it while keeping the data intact.`;
-        }
-
-        const result = await model.generateContent(fullInstruction);
-        const text = result.response.text();
-
-        // Clean markdown code blocks
-        let clean = text.replace(/```jsx/g, '').replace(/```javascript/g, '').replace(/```/g, '').trim();
-
-        // Apply sanitization to fix common quote escaping issues
-        clean = sanitizeGeneratedCode(clean);
-
-        return clean;
-    } catch (e) {
-        console.error("Agent B Error:", e);
-        throw e;
     }
+
+    const result = await model.generateContent(fullInstruction);
+    const text = result.response.text();
+
+    // Clean markdown code blocks
+    let clean = text.replace(/```jsx/g, '').replace(/```javascript/g, '').replace(/```/g, '').trim();
+
+    // Apply sanitization to fix common quote escaping issues
+    clean = sanitizeGeneratedCode(clean);
+
+    return clean;
+  } catch (e) {
+    console.error("Agent B Error:", e);
+    throw e;
+  }
 }

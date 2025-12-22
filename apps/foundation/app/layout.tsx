@@ -14,24 +14,22 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body>
-          <header className="flex justify-between items-center p-4 gap-4 h-16 bg-slate-900 text-white">
+        <body className="h-screen w-screen overflow-hidden flex flex-col">
+          <header className="flex-none flex justify-between items-center p-4 gap-4 h-16 bg-slate-900 text-white z-50">
             <div className="font-bold text-xl">Foundation</div>
             <div className="flex gap-4 items-center">
-              <nav className="flex gap-4 text-sm">
-                <a href="/projects" className="hover:text-blue-400">Projects</a>
-                <a href="/editor" className="hover:text-purple-400 font-bold border-b-2 border-purple-400">Fluid Editor</a>
-              </nav>
+
               <SignedOut>
                 <SignInButton />
               </SignedOut>
               <SignedIn>
-                <OrganizationSwitcher afterCreateOrganizationUrl="/projects" />
                 <UserButton />
               </SignedIn>
             </div>
           </header>
-          {children}
+          <main className="flex-1 overflow-hidden relative">
+            {children}
+          </main>
         </body>
       </html>
     </ClerkProvider>
