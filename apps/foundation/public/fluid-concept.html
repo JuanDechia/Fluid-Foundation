@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Learning Interface - Personalized</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #020617; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { 
+            Sparkles, 
+            Brain, 
+            ChevronRight, 
+            BookOpen, 
+            Terminal, 
+            Sigma, 
+            Lightbulb, 
+            MessageCircle, 
+            ArrowRight,
+            Layers,
+            Network
+        } = lucide;
+
+        // --- COMPONENTS ---
+
+        // 1. The "Companion Voice" Component
+        // This represents the AI speaking directly to the user, distinct from the data.
+        const CompanionBriefing = ({ title, message }) => (
+            <div className="w-full max-w-5xl mx-auto mb-10 animate-fade-in">
+                <div className="relative bg-gradient-to-r from-indigo-900/40 to-slate-900/40 rounded-2xl border border-indigo-500/20 p-8 overflow-hidden">
+                    {/* Decorative Elements to make it feel 'alive' */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                    
+                    <div className="relative z-10 flex flex-col md:flex-row gap-6 items-start">
+                        <div className="shrink-0 p-3 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <Sparkles size={28} />
+                        </div>
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-indigo-300 text-xs font-bold uppercase tracking-widest">
+                                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+                                Insight for Juan
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-100">{title}</h2>
+                            <p className="text-lg text-slate-300 leading-relaxed max-w-3xl">
+                                {message}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // 2. The "Field Note" Component
+        // "Director's Commentary" style notes injected into the hard data.
+        const FieldNote = ({ content }) => (
+            <div className="my-6 flex gap-4 p-5 rounded-xl bg-teal-900/10 border-l-4 border-teal-500/50">
+                <div className="shrink-0 text-teal-500 mt-1">
+                    <Lightbulb size={20} />
+                </div>
+                <div>
+                    <h4 className="text-teal-400 text-xs font-bold uppercase mb-1">Why I included this</h4>
+                    <p className="text-slate-300 italic text-sm leading-relaxed">
+                        "{content}"
+                    </p>
+                </div>
+            </div>
+        );
+
+        // 3. The Data Card (Clean UI)
+        // This holds the actual "Textbook" content.
+        const ConceptCard = ({ index, title, definition, points, mathSnippet, contextNote }) => (
+            <div className="group relative bg-slate-900/50 border border-slate-800 hover:border-slate-700 rounded-2xl p-8 transition-all hover:bg-slate-900/80">
+                <div className="flex items-center gap-4 mb-6">
+                    <div className="w-10 h-10 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center font-mono font-bold border border-slate-700">
+                        {index.toString().padStart(2, '0')}
+                    </div>
+                    <h3 className="text-xl font-bold text-white">{title}</h3>
+                </div>
+
+                <div className="space-y-6">
+                    <p className="text-slate-400 leading-relaxed border-l-2 border-slate-800 pl-4">
+                        {definition}
+                    </p>
+
+                    {/* Injecting the AI Voice directly into the card flow */}
+                    {contextNote && <FieldNote content={contextNote} />}
+
+                    {/* The Academic Data */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {points.map((p, i) => (
+                            <div key={i} className="flex items-start gap-3 text-sm text-slate-300 bg-black/20 p-3 rounded-lg">
+                                <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></div>
+                                <span>{p}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {mathSnippet && (
+                        <div className="mt-4 p-4 bg-slate-950 rounded-lg border border-slate-800 font-mono text-xs text-indigo-300 overflow-x-auto">
+                            {mathSnippet}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        // 4. Code Block Wrapper
+        const CodeSnippet = ({ code }) => (
+            <div className="rounded-xl overflow-hidden border border-slate-800 bg-[#0d1117] mt-8">
+                <div className="flex items-center justify-between px-4 py-3 bg-slate-900/50 border-b border-slate-800">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase">
+                        <Terminal size={14} /> Python Verification Script
+                    </div>
+                    <div className="flex gap-1.5">
+                        <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+                        <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+                        <div className="w-3 h-3 rounded-full bg-slate-700"></div>
+                    </div>
+                </div>
+                <pre className="p-6 text-sm font-mono text-slate-300 overflow-x-auto leading-relaxed">
+                    {code}
+                </pre>
+            </div>
+        );
+
+        // --- MAIN APP ---
+
+        const App = () => {
+            // In a real app, this data comes from Agent A
+            const lessonData = {
+                briefing: {
+                    title: "Let's talk about Dimensions.",
+                    message: "I pulled this specific lesson on Vector Spaces because I know you're interested in how LLMs compress data. The Rank-Nullity theorem we're about to look at isn't just abstract math—it's actually the theoretical limit of how much an Autoencoder can compress a thought before it loses meaning. Let's break it down."
+                },
+                concepts: [
+                    {
+                        title: "Vector Spaces & Embeddings",
+                        definition: "A Vector Space is a collection of objects (vectors) that can be added together and multiplied by scalars. In AI, this is the 'canvas' where all meaning exists.",
+                        contextNote: "When we talk about 'Latent Space' in Stable Diffusion or GPT, we are just talking about a really, really high-dimensional Vector Space.",
+                        points: [
+                            "Associativity: u + (v + w) = (u + v) + w",
+                            "Identity Element: There must be a 'zero' vector.",
+                            "Closure: Adding two vectors keeps you inside the space."
+                        ]
+                    },
+                    {
+                        title: "The Basis (The Vocabulary)",
+                        definition: "A Basis is the minimal set of vectors needed to describe every point in the space via linear combinations.",
+                        contextNote: "Think of the Basis as the model's vocabulary. If your basis is too small (low dimension), the model literally lacks the words to describe complex data.",
+                        points: [
+                            "Linear Independence: No basis vector is redundant.",
+                            "Spanning: The basis covers the entire space.",
+                            "Dimension: The count of basis vectors (e.g., 4096 in Llama-2)."
+                        ]
+                    },
+                    {
+                        title: "Rank-Nullity Theorem",
+                        definition: "The fundamental relationship between the input dimensions, the output dimensions, and the information lost during transformation.",
+                        mathSnippet: "rank(A) + nullity(A) = n (input dimension)",
+                        contextNote: "This is the cool part. 'Nullity' is mathematically defining 'Information Loss'. When you run a prompt through a small layer, the nullity tells you exactly how many dimensions of meaning were destroyed.",
+                        points: [
+                            "Rank: Dimensions preserved (Image space).",
+                            "Nullity: Dimensions flattened to zero (Kernel space).",
+                            "Application: Bottleneck layers in Autoencoders."
+                        ]
+                    }
+                ],
+                code: `import numpy as np
+from scipy.linalg import null_space
+
+# Let's prove the theorem numerically
+def verify_rank_nullity(m, n):
+    # Create a random matrix (Neural Network Layer)
+    A = np.random.randn(m, n)
+    
+    # Calculate Rank (Information kept)
+    rank = np.linalg.matrix_rank(A)
+    
+    # Calculate Nullity (Information lost)
+    ns = null_space(A)
+    nullity = ns.shape[1]
+    
+    print(f"Input Dims: {n}")
+    print(f"Kept: {rank} | Lost: {nullity}")
+    
+    # The magic moment
+    assert rank + nullity == n
+
+verify_rank_nullity(10, 5)`
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-950 text-slate-200 pb-20">
+                    {/* Navigation Bar (Simulated) */}
+                    <div className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+                        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-2 font-bold text-slate-100">
+                                <Brain className="text-indigo-500" size={24} />
+                                <span>FluidMath</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm font-medium text-slate-400">
+                                <span className="hover:text-indigo-400 cursor-pointer transition-colors">Curriculum</span>
+                                <span className="text-slate-700">/</span>
+                                <span className="text-indigo-400">Module 1.1</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <main className="px-6 py-12">
+                        {/* 1. The Personal "Hello" */}
+                        <CompanionBriefing 
+                            title={lessonData.briefing.title} 
+                            message={lessonData.briefing.message} 
+                        />
+
+                        {/* 2. The Content Grid */}
+                        <div className="max-w-5xl mx-auto space-y-8">
+                            <div className="flex items-center gap-3 mb-4">
+                                <Layers className="text-slate-500" size={20} />
+                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Core Concepts</h3>
+                            </div>
+                            
+                            {lessonData.concepts.map((concept, idx) => (
+                                <ConceptCard 
+                                    key={idx} 
+                                    index={idx + 1} 
+                                    {...concept} 
+                                />
+                            ))}
+
+                            {/* 3. Interactive Code Section */}
+                            <div className="pt-8">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <Network className="text-slate-500" size={20} />
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Interactive Proof</h3>
+                                </div>
+                                <div className="p-1 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20">
+                                    <div className="bg-slate-950 rounded-xl p-8">
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                                            <div>
+                                                <h3 className="text-lg font-bold text-white">Rank-Nullity Verification</h3>
+                                                <p className="text-slate-400 text-sm">A quick Python script I wrote to prove the math actually works.</p>
+                                            </div>
+                                            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg transition-all shadow-lg shadow-indigo-500/20">
+                                                <Terminal size={16} /> Run Script
+                                            </button>
+                                        </div>
+                                        <CodeSnippet code={lessonData.code} />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 4. The "Conversation Continues" Footer */}
+                        <div className="max-w-5xl mx-auto mt-20 pt-10 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+                            <div>
+                                <h4 className="text-slate-100 font-bold mb-1">Ready for the next step?</h4>
+                                <p className="text-slate-500 text-sm">We can move on to Matrix Calculus, or I can generate more examples for this topic.</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button className="px-5 py-2.5 rounded-full border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors text-sm font-medium">
+                                    Give me more examples
+                                </button>
+                                <button className="px-5 py-2.5 rounded-full bg-slate-100 text-slate-900 hover:bg-white transition-colors text-sm font-bold flex items-center gap-2">
+                                    Next Lesson <ArrowRight size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

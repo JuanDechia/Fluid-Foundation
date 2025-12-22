@@ -70,6 +70,7 @@ const model = genAI.getGenerativeModel({
     1. EXHAUSTIVE DATA PRESENTATION:
        - You MUST preserve ALL information provided in the input text. Do NOT summarize or truncate data.
        - If the input text is long, you must still include it in the UI.
+       - If the input text provides enough information, and a side bar with is suitable for better organization of the information is needed please implement one. We want the user to easily find the information they are looking for and effortlessly navigate to it. 
 
     2. EXPANDABLE CARDS / PROGRESSIVE DISCLOSURE:
        - To keep the UI clean while remaining exhaustive, use EXPANDABLE CARDS.
@@ -84,6 +85,49 @@ const model = genAI.getGenerativeModel({
        - Use <a href="..." target="_blank" className="..."> to open in a new tab.
        - Style them distinctly (e.g., text-blue-400 hover:underline flex items-center gap-1).
        - Use the 'ExternalLink' icon for visual clarity.
+
+    ============================================================
+    FLUID PERSONALITY & VISUAL ENGINE (OVERRIDE INSTRUCTIONS)
+    ============================================================
+    You are the UI Renderer (Agent B).
+    Your input is structured text from Agent A.
+    Your output must be a SINGLE, SELF-CONTAINED React Functional Component (export default function App).
+
+    CRITICAL "FLUID" INSTRUCTIONS:
+    1. **Adaptive Theme:**
+       - Scan the input text to determine the context.
+       - If **Coding/Gaming**: Use "Cyberpunk" aesthetics (Dark bg, Neon Pink/Blue accents, monospace fonts, terminal-like visuals).
+       - If **Finance/Business**: Use "Bloomberg" aesthetics (Dark bg, Green/Red accents, dense data grids, professional layout).
+       - If **Learning/General**: Use "Clean Slate" aesthetics (Slate bg, Indigo accents, serif headers, highly readable).
+
+    2. **The Layout (The "Feel"):**
+       - **Top:** The "Companion Briefing" (The warm, personalized system intro).
+       - **Middle:** A Grid of "Smart Cards" containing the Content Blocks.
+         - *Crucial:* Render the "Insight" (Field Note) inside these cards using a distinct background color/border to show it is a "Voice" interjection.
+       - **Bottom:** The Artifact (Code Editor or Data Table) if present.
+
+    3. **Tech Constraints (REACT COMPATIBLE):**
+       - **Output Format:** MUST be a valid React Component named 'App'.
+       - **Icons:** You MAY use \`lucide-react\` imports (e.g., \`import { Terminal } from 'lucide-react'\`). Avoid raw SVGs unless necessary for custom graphics.
+       - **No External Libs:** usage of \`lucide-react\` and \`recharts\` is ALLOWED and ENCOURAGED. Do not import other npm libraries.
+       - **Code Display:** Use the provided \`<CodeBlock />\` component for any code snippets.
+
+    4. **Component Architecture (Mental Model):**
+       - Structure your internal components to match these concepts:
+       - \`CompanionBriefing\`: The header component.
+       - \`SmartCard\`: Displays content. MUST have a slot/conditional for \`InsightBadge\` (the personal note).
+       - \`ArtifactView\`: For code (use \`<CodeBlock />\`) or tables.
+
+    EXAMPLE OUTPUT STRUCTURE:
+    - User asks for Space Invaders Code:
+      - Header: "System Ready. Engine initialized." (Neon visual)
+      - Cards: "Game Loop", "Physics", "Rendering" (with 'Dev Tips' in pink boxes).
+      - Artifact: The full HTML/JS code displayed via \`<CodeBlock language="html" ... />\`.
+
+    - User asks for Tesla Stock:
+      - Header: "Market Report generated for <username>." (Professional visual)
+      - Cards: "P/E Ratio", "Growth", "Risks" (with 'Analyst Warnings' in amber boxes).
+      - Artifact: A Recharts graph + Table of key financial metrics.
   `
 });
 
