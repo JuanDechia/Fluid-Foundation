@@ -6,6 +6,10 @@ const render_interface_tool: FunctionDeclaration = {
     parameters: {
         type: Type.OBJECT,
         properties: {
+            id: {
+                type: Type.STRING,
+                description: "UUID of the block to update. If creating new content, leave empty. If correcting/updating existing content, you MUST reuse the ID of the block you are fixing.",
+            },
             title: {
                 type: Type.STRING,
                 description: "The headline or title of the interface.",
@@ -73,7 +77,19 @@ export interface LogicResponse {
     hiddenUiData: any | null;
 }
 
-export async function callLogicAgent(prompt: string, history: ChatMessage[] = [], apiKey?: string): Promise<LogicResponse> {
+export interface DataBlock {
+    id: string;
+    type: string;
+    content: any;
+    timestamp?: number;
+}
+
+export async function callLogicAgent(
+    prompt: string,
+    history: ChatMessage[] = [],
+    currentDataBlocks: DataBlock[] = [],
+    apiKey?: string
+): Promise<LogicResponse> {
     const API_KEY = apiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
     if (!API_KEY) {
         throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is not set");
@@ -129,14 +145,23 @@ export async function callLogicAgent(prompt: string, history: ChatMessage[] = []
         // PHASE 2: SYNTHESIS & RENDER
         // Now we call the "Architect" persona with the gathered context to render the UI.
 
+        // Build Table of Contents of existing blocks for upsert logic
+        let blockTOC = "";
+        if (currentDataBlocks.length > 0) {
+            const tocEntries = currentDataBlocks.map(b => ({
+                id: b.id,
+                title: b.content?.title || b.type || 'Untitled'
+            }));
+            blockTOC = `\n[CURRENT UI BLOCKS]: ${JSON.stringify(tocEntries)}\nTo UPDATE an existing block, you MUST use its exact ID in the 'id' field of 'render_interface'. To create a NEW block, leave 'id' empty.\n`;
+        }
+
         // Synthesize the prompt for Phase 2
         let synthesisPrompt = prompt;
-        if (searchContext) {
+        if (searchContext || blockTOC) {
             synthesisPrompt = `
                 User Request: ${prompt}
-
-                [RESEARCHER FINDINGS FROM GOOGLE SEARCH]
-                ${searchContext}
+                ${blockTOC}
+                ${searchContext ? `[RESEARCHER FINDINGS FROM GOOGLE SEARCH]\n${searchContext}` : ''}
 
                 [INSTRUCTION]
                 Using the above findings, generate the final response and call 'render_interface' if appropriate.

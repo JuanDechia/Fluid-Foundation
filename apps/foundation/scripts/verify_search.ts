@@ -21,7 +21,7 @@ async function main() {
             return;
         }
 
-        const response = await callLogicAgent(prompt, [], apiKey);
+        const response = await callLogicAgent(prompt, [], [], apiKey);
         console.log("Prompt:", prompt);
         console.log("---------------------------------------------------");
         console.log("Response:", response.textResponse);

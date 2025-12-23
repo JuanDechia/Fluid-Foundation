@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Send, ArrowLeft, ArrowRight, RotateCcw, Plus, MessageSquare, Trash2, AlertTriangle, Wrench, Sparkles, Menu } from 'lucide-react';
 import SandboxedRenderer from './SandboxedRenderer';
 import { HistoryManager, type FluidState } from '@/lib/fluid/history_manager';
-import { callLogicAgent, type ChatMessage } from '@/lib/fluid/agents/agent_logic';
+import { callLogicAgent, type ChatMessage, type DataBlock } from '@/lib/fluid/agents/agent_logic';
 import { callUIAgent } from '@/lib/fluid/agents/agent_ui';
 import {
     getConversations,
@@ -172,7 +172,11 @@ const FluidEngine: React.FC = () => {
             // 1. Logic Agent (Agent A) - INVISIBLE HANDOFF
             // addLog('Agent A: Processing...');
             const startTime = performance.now();
-            const { textResponse, hiddenUiData } = await callLogicAgent(message, tempHistory);
+            const { textResponse, hiddenUiData } = await callLogicAgent(
+                message,
+                tempHistory,
+                (currentState?.dataContext as DataBlock[]) || []
+            );
             const logicEndTime = performance.now();
             const logicDuration = Math.round(logicEndTime - startTime);
 
@@ -203,23 +207,55 @@ const FluidEngine: React.FC = () => {
                     }];
                 }
 
-                // Create New Block
-                const newBlock = {
-                    id: crypto.randomUUID(),
-                    type: hiddenUiData.type || 'generic_data',
-                    content: hiddenUiData,
-                    timestamp: Date.now()
-                };
+                // UPSERT LOGIC: Check if the block already exists
+                const incomingId = hiddenUiData.id;
+                let newContext: DataBlock[];
 
-                const newContext = [...currentBlocks, newBlock];
+                if (incomingId) {
+                    // Try to find existing block by ID
+                    const existingIndex = currentBlocks.findIndex((b: DataBlock) => b.id === incomingId);
+
+                    if (existingIndex !== -1) {
+                        // UPDATE: Replace existing block at same index
+                        const updatedBlock: DataBlock = {
+                            id: incomingId,
+                            type: hiddenUiData.type || currentBlocks[existingIndex].type || 'generic_data',
+                            content: hiddenUiData,
+                            timestamp: Date.now()
+                        };
+                        newContext = [...currentBlocks];
+                        newContext[existingIndex] = updatedBlock;
+                    } else {
+                        // INSERT: ID provided but not found, treat as new
+                        const newBlock: DataBlock = {
+                            id: incomingId,
+                            type: hiddenUiData.type || 'generic_data',
+                            content: hiddenUiData,
+                            timestamp: Date.now()
+                        };
+                        newContext = [...currentBlocks, newBlock];
+                    }
+                } else {
+                    // INSERT: No ID provided, create new block with generated ID
+                    const newBlock: DataBlock = {
+                        id: crypto.randomUUID(),
+                        type: hiddenUiData.type || 'generic_data',
+                        content: hiddenUiData,
+                        timestamp: Date.now()
+                    };
+                    newContext = [...currentBlocks, newBlock];
+                }
+
+                // Determine if this was an update (for optimization decision)
+                const wasUpdate = incomingId && currentBlocks.some((b: DataBlock) => b.id === incomingId);
 
                 // OPTIMIZATION: SKIP AGENT B?
-                // Check if we already have a UI template and the user didn't ask for a visual change
+                // Skip if: we already have a UI, AND (this was an update OR user didn't request visual change)
                 const visualKeywords = ['layout', 'design', 'color', 'style', 'theme', 'sidebar', 'view', 'grid', 'list', 'chart', 'graph'];
                 const userRequestedVisualChange = visualKeywords.some(k => message.toLowerCase().includes(k));
                 const hasExistingUI = !!currentState?.uiConfig;
 
-                const shouldSkipAgentB = hasExistingUI && !userRequestedVisualChange;
+                const shouldSkipAgentB = hasExistingUI && (wasUpdate || !userRequestedVisualChange);
 
                 let uiResultCode = "";
                 const uiStartTime = performance.now();
