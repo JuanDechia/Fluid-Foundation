@@ -169,49 +169,97 @@ const FluidEngine: React.FC = () => {
             // Save User Message
             await addMessage(conversationId, 'user', message);
 
-            // 1. Logic Agent (Agent A)
+            // 1. Logic Agent (Agent A) - INVISIBLE HANDOFF
             // addLog('Agent A: Processing...');
-            const logicResponseText = await callLogicAgent(message, tempHistory);
+            const startTime = performance.now();
+            const { textResponse, hiddenUiData } = await callLogicAgent(message, tempHistory);
+            const logicEndTime = performance.now();
+            const logicDuration = Math.round(logicEndTime - startTime);
 
-            // Save Agent Message
-            await addMessage(conversationId, 'model', logicResponseText);
+            // Save Agent Message (Text Only)
+            await addMessage(conversationId, 'model', textResponse);
 
-            // Update Local History
+            // Update Local History (Initial)
             const newHistory: ChatMessage[] = [
                 ...tempHistory,
-                { role: 'model', parts: logicResponseText }
+                { role: 'model', parts: textResponse, metrics: { logicLatency: logicDuration } }
             ];
             setChatHistory(newHistory);
 
-            // 2. Accumulate Data Context
-            const previousContext = currentState?.dataContext || "";
-            const combinedContext = previousContext
-                ? `${previousContext}\n\n---\n\n${logicResponseText}`
-                : logicResponseText;
+            // 2. Conditional UI Agent Handoff
+            if (hiddenUiData) {
+                // addLog('Agent B: Generating Interface from Data...');
+                const dataContextString = JSON.stringify(hiddenUiData);
 
-            // 3. UI Agent (Agent B)
-            // addLog('Agent B: Generating Interface...');
-            const previousCode = currentState?.uiConfig;
-            const uiResultCode = await callUIAgent(combinedContext, previousCode);
+                // 2a. Accumulate Data Context
+                const previousContext = currentState?.dataContext || "";
+                const combinedContext = previousContext
+                    ? `${previousContext}\n\n---\n\n${dataContextString}`
+                    : dataContextString;
 
-            // 4. Update State & Persist
-            const newState: FluidState = {
-                id: crypto.randomUUID(),
-                uiConfig: uiResultCode,
-                dataContext: combinedContext,
-                timestamp: Date.now()
-            };
+                // 3. UI Agent (Agent B)
+                const previousCode = currentState?.uiConfig;
+                // Pass the NEW data primarily
+                const uiStartTime = performance.now();
+                const uiResultCode = await callUIAgent(combinedContext, previousCode);
+                const uiEndTime = performance.now();
+                const uiDuration = Math.round(uiEndTime - uiStartTime);
+                const totalDuration = Math.round(uiEndTime - startTime);
 
-            await saveState(conversationId, newState.uiConfig, newState.dataContext);
+                // Update Local History with FULL metrics
+                const finalHistory: ChatMessage[] = [
+                    ...tempHistory,
+                    {
+                        role: 'model',
+                        parts: textResponse,
+                        metrics: {
+                            logicLatency: logicDuration,
+                            uiLatency: uiDuration,
+                            totalLatency: totalDuration
+                        }
+                    }
+                ];
+                setChatHistory(finalHistory);
 
-            historyManager.push(newState);
-            setCurrentState(newState);
-            // addLog('System: Render Complete');
+                // 4. Update State & Persist
+                const newState: FluidState = {
+                    id: crypto.randomUUID(),
+                    uiConfig: uiResultCode,
+                    dataContext: combinedContext,
+                    timestamp: Date.now()
+                };
+
+                await saveState(conversationId, newState.uiConfig, newState.dataContext);
+
+                historyManager.push(newState);
+                setCurrentState(newState);
+                // addLog('System: Render Complete');
+            } else {
+                // No UI, just update metrics for logic only
+                const totalDuration = Math.round(logicEndTime - startTime);
+                const finalHistory: ChatMessage[] = [
+                    ...tempHistory,
+                    {
+                        role: 'model',
+                        parts: textResponse,
+                        metrics: {
+                            logicLatency: logicDuration,
+                            totalLatency: totalDuration
+                        }
+                    }
+                ];
+                setChatHistory(finalHistory);
+            }
 
         } catch (e) {
             addLog(`Error: ${e}`);
             console.error(e);
-            const errorHistory = [...chatHistory, { role: 'user', parts: message }, { role: 'model', parts: `Error: ${e}` }] as ChatMessage[];
+
+            const errorHistory = [
+                ...chatHistory,
+                { role: 'user', parts: message },
+                { role: 'model', parts: `Error: ${e}` }
+            ] as ChatMessage[];
             setChatHistory(errorHistory);
         } finally {
             setIsProcessing(false);
@@ -339,8 +387,15 @@ const FluidEngine: React.FC = () => {
                                 >
                                     <div className="whitespace-pre-wrap">{msg.parts}</div>
                                 </div>
-                                <span className="text-[10px] text-slate-600 mt-1 px-1">
-                                    {msg.role === 'user' ? 'You' : 'Fluid Agent'}
+                                <span className="text-[10px] text-slate-600 mt-1 px-1 flex items-center gap-2">
+                                    <span>{msg.role === 'user' ? 'You' : 'Fluid Agent'}</span>
+                                    {msg.metrics && (
+                                        <span className="text-slate-700 font-mono opacity-70">
+                                            {`L: ${(msg.metrics.logicLatency || 0) / 1000}s`}
+                                            {msg.metrics.uiLatency ? ` | UI: ${(msg.metrics.uiLatency / 1000).toFixed(1)}s` : ''}
+                                            {` | T: ${(msg.metrics.totalLatency || 0) / 1000}s`}
+                                        </span>
+                                    )}
                                 </span>
                             </div>
                         ))}

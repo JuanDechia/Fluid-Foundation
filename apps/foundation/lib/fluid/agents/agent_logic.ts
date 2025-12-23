@@ -1,86 +1,188 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, Type, FunctionDeclaration, Part, Content, FunctionCallingConfigMode } from "@google/genai";
 
-const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
-const genAI = new GoogleGenerativeAI(API_KEY);
+const render_interface_tool: FunctionDeclaration = {
+    name: "render_interface",
+    description: "Generates a structured visual interface or dashboard for the user.",
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            title: {
+                type: Type.STRING,
+                description: "The headline or title of the interface.",
+            },
+            summary: {
+                type: Type.STRING,
+                description: "A brief executive summary of the content.",
+            },
+            content_blocks: {
+                type: Type.ARRAY,
+                description: "List of content blocks to display.",
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        content: { type: Type.STRING, description: "The main text or data content." },
+                        insight_type: { type: Type.STRING, description: "Type of insight (e.g., 'Analyst Note', 'Warning')." },
+                        insight_value: { type: Type.STRING, description: "The specific insight text." },
+                    },
+                    required: ["title", "content", "insight_type", "insight_value"],
+                },
+            },
+            raw_data: {
+                type: Type.STRING,
+                description: "Optional raw data for code snippets, CSVs, or complex datasets.",
+            },
+        },
+        required: ["title", "summary", "content_blocks"],
+    },
+};
 
-const model = genAI.getGenerativeModel({
-    model: "gemini-3-flash-preview",
-    systemInstruction: `You are the Logic Core (Agent A) of the Fluid Interface System.
+const SYSTEM_INSTRUCTION = `You are the Logic Core (Agent A) of the Fluid Interface System.
 Your goal is to be the user's expert companion. You are NOT a generic chatbot. You are a morphing expert system.
 
+[SYSTEM TIME]: ${new Date().toISOString()}
+
 STEP 1: DETERMINE THE PERSONA
-Based on the user's request, adopt the correct stance:
-- **Request:** "Should I buy Tesla?" -> **Persona:** Senior Financial Analyst (Data-driven, cautious, insightful).
-- **Request:** "Code a game." -> **Persona:** Lead Software Architect (Technical, clean, best-practices).
-- **Request:** "Teach me Math." -> **Persona:** Empathetic Professor (Patient, visual).
-- **Request:** "What happened in the news?" -> **Persona:** Executive Briefer (Concise, objective, curated).
+Based on the user's request, adopt the correct stance (e.g., Financial Analyst, Software Architect, Professor).
 
-STEP 2: GENERATE THE CONTENT (Strict Structure)
-You must output your response using the following headers so the UI Agent can render it.
-
-SECTION 1: # BRIEFING
-- Speak directly to the user.
-- Set the tone. If it's code, be ready to work. If it's finance, be serious but personal.
-- Format:
-  Title: [Headline, e.g., "Tesla Market Analysis" or "Space Invaders Engine"]
-  Message: [Your conversational intro. E.g., "I've analyzed the latest 10-K filings. The volatility is high, but the tech sector is rallying. Here is the breakdown..."]
-
-SECTION 2: # CONTENT_BLOCKS
-- Break the answer into 3-4 discrete blocks.
-- **CRITICAL:** Every block must contain an "Insight" (The "Field Note"). This is where you add value beyond the raw data.
-- Format:
-  Block Title: [e.g., "Q3 Financials" or "Collision Physics"]
-  Main Text: [The hard data/explanation]
-  Insight Type: [e.g., "Analyst Note", "Dev Tip", "Historical Fact"]
-  Insight Content: [Your personal take. e.g., "Be careful here, this margin looks inflated..."]
-  Key Points:
-  - [Detail 1]
-  - [Detail 2]
-
-SECTION 3: # ARTIFACT (Optional)
-- If the user needs Code, a Table, or specific raw data.
-- Format:
-  Type: [CODE or TABLE]
-  Language: [e.g., python, javascript, markdown]
-  Content: [The actual code or data]
+STEP 2: GENERATE CONTENT
+- If the user's request requires a visual interface, dashboard, structured answer, or specific data (like code, tables, or news analysis), you MUST call the 'render_interface' tool.
+- Do NOT output the data as text in the chat.
+- ONLY output a conversational summary or confirmation in the main chat response to the user (e.g., "I've analyzed the market data, here is the dashboard.").
 
 GENERAL RULES:
-- Always use up-to-date information, especially when asked for news events, market data, or current events.
-- Never use generic filler.
-- If asking for code, provide the FULL working solution.
-- If asking for finance, use real, up-to-date numbers (simulate this behavior).
-- Always include the "Insight" sections; this is your personality.`,
-    tools: [
-        {
-            // @ts-ignore
-            googleSearch: {}
-        }
-    ]
-});
+- Always use up-to-date information.
+- Use your 'googleSearch' tool for current events, news, or specific real-time data.
+- Provide high-quality insights in the 'insight_value' fields of the tool.
+- If asking for code, put the full code in 'raw_data' or a content block.`;
 
+// Maintained for compatibility with FluidEngine (which expects strings)
 export interface ChatMessage {
     role: "user" | "model";
     parts: string;
+    metrics?: {
+        logicLatency?: number;
+        uiLatency?: number;
+        totalLatency?: number;
+    };
 }
 
-export async function callLogicAgent(prompt: string, history: ChatMessage[] = []): Promise<string> {
+export interface LogicResponse {
+    textResponse: string;
+    hiddenUiData: any | null;
+}
+
+export async function callLogicAgent(prompt: string, history: ChatMessage[] = [], apiKey?: string): Promise<LogicResponse> {
+    const API_KEY = apiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
     if (!API_KEY) {
-        throw new Error("VITE_GEMINI_API_KEY is not set");
+        throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is not set");
     }
+    const client = new GoogleGenAI({ apiKey: API_KEY });
 
     try {
-        const chat = model.startChat({
-            history: history.map(h => ({
-                role: h.role,
-                parts: [{ text: h.parts }]
-            }))
+        // Map string history to Gemini Content objects
+        const geminiHistory: Content[] = history.map(h => ({
+            role: h.role,
+            parts: [{ text: h.parts }]
+        }));
+
+        // PHASE 1: SEARCH DISCOVERY
+        // We first ask the "Researcher" persona if they need to search the web.
+        const searchResponse = await client.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: [
+                ...geminiHistory,
+                // We append a specific instruction for this turn
+                {
+                    role: "user", parts: [{
+                        text: `
+                    ${prompt}
+                    
+                    [INTERNAL SEARCH INSTRUCTION]
+                    You are the Researcher. 
+                    1. If the user's request requires external information, news, or fresh data, use use your 'googleSearch' tool.
+                    2. If NO search is needed, just respond with your analysis or answer.
+                ` }]
+                }
+            ],
+            config: {
+                systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+                tools: [{ googleSearch: {} }],
+                toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } }
+            }
         });
 
-        const result = await chat.sendMessage(prompt);
-        const text = result.response.text();
+        const searchCandidate = searchResponse.candidates?.[0];
+        const searchParts = searchCandidate?.content?.parts || [];
 
-        // Return the raw text directly
-        return text;
+        let searchContext = "";
+        let searchGroundingArgs: any = null;
+
+        // Collect search results/context from Phase 1
+        for (const part of searchParts) {
+            if (part.text) {
+                searchContext += part.text;
+            }
+        }
+
+        // PHASE 2: SYNTHESIS & RENDER
+        // Now we call the "Architect" persona with the gathered context to render the UI.
+
+        // Synthesize the prompt for Phase 2
+        let synthesisPrompt = prompt;
+        if (searchContext) {
+            synthesisPrompt = `
+                User Request: ${prompt}
+
+                [RESEARCHER FINDINGS FROM GOOGLE SEARCH]
+                ${searchContext}
+
+                [INSTRUCTION]
+                Using the above findings, generate the final response and call 'render_interface' if appropriate.
+                If the search didn't yield results, do your best with your internal knowledge.
+            `;
+        }
+
+        const renderResponse = await client.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: [
+                ...geminiHistory,
+                { role: "user", parts: [{ text: synthesisPrompt }] }
+            ],
+            config: {
+                systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+                tools: [{ functionDeclarations: [render_interface_tool] }],
+                toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } }
+            }
+        });
+
+        const renderCandidate = renderResponse.candidates?.[0];
+        const renderParts = renderCandidate?.content?.parts || [];
+
+        let textResponse = "";
+        let hiddenUiData = null;
+
+        // Check for function calls and text in Phase 2
+        for (const part of renderParts) {
+            if (part.text) {
+                textResponse += part.text;
+            }
+            if (part.functionCall) {
+                if (part.functionCall.name === "render_interface") {
+                    hiddenUiData = part.functionCall.args;
+                }
+            }
+        }
+
+        if (hiddenUiData && !textResponse && (hiddenUiData as any).summary) {
+            textResponse = (hiddenUiData as any).summary;
+        }
+
+        return {
+            textResponse: textResponse || "Processing...",
+            hiddenUiData,
+        };
+
     } catch (e) {
         console.error("Agent A Error:", e);
         throw e;
