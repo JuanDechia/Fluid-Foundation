@@ -64,6 +64,7 @@ export interface ChatMessage {
         logicLatency?: number;
         uiLatency?: number;
         totalLatency?: number;
+        cached?: boolean;
     };
 }
 

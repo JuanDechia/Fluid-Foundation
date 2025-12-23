@@ -188,20 +188,53 @@ const FluidEngine: React.FC = () => {
 
             // 2. Conditional UI Agent Handoff
             if (hiddenUiData) {
-                // addLog('Agent B: Generating Interface from Data...');
-                const dataContextString = JSON.stringify(hiddenUiData);
+                // DATA APPEND LOGIC
+                let currentBlocks: any[] = [];
+                const previousContext = currentState?.dataContext;
 
-                // 2a. Accumulate Data Context
-                const previousContext = currentState?.dataContext || "";
-                const combinedContext = previousContext
-                    ? `${previousContext}\n\n---\n\n${dataContextString}`
-                    : dataContextString;
+                if (Array.isArray(previousContext)) {
+                    currentBlocks = [...previousContext];
+                } else if (previousContext) {
+                    // Legacy migration: wrap old string/object in a generic block
+                    currentBlocks = [{
+                        id: 'legacy-root',
+                        type: 'legacy_content',
+                        content: previousContext
+                    }];
+                }
 
-                // 3. UI Agent (Agent B)
-                const previousCode = currentState?.uiConfig;
-                // Pass the NEW data primarily
+                // Create New Block
+                const newBlock = {
+                    id: crypto.randomUUID(),
+                    type: hiddenUiData.type || 'generic_data',
+                    content: hiddenUiData,
+                    timestamp: Date.now()
+                };
+
+                const newContext = [...currentBlocks, newBlock];
+
+                // OPTIMIZATION: SKIP AGENT B?
+                // Check if we already have a UI template and the user didn't ask for a visual change
+                const visualKeywords = ['layout', 'design', 'color', 'style', 'theme', 'sidebar', 'view', 'grid', 'list', 'chart', 'graph'];
+                const userRequestedVisualChange = visualKeywords.some(k => message.toLowerCase().includes(k));
+                const hasExistingUI = !!currentState?.uiConfig;
+
+                const shouldSkipAgentB = hasExistingUI && !userRequestedVisualChange;
+
+                let uiResultCode = "";
                 const uiStartTime = performance.now();
-                const uiResultCode = await callUIAgent(combinedContext, previousCode);
+
+                if (shouldSkipAgentB) {
+                    // FAST PATH: Re-use existing template
+                    // addLog('Optimization: Skipping Agent B (Data Push Only)');
+                    uiResultCode = currentState.uiConfig;
+                } else {
+                    // SLOW PATH: Generate/Update Template
+                    // addLog('Agent B: Generating Interface...');
+                    // Pass the FULL ARRAY to Agent B
+                    uiResultCode = await callUIAgent(newContext, currentState?.uiConfig);
+                }
+
                 const uiEndTime = performance.now();
                 const uiDuration = Math.round(uiEndTime - uiStartTime);
                 const totalDuration = Math.round(uiEndTime - startTime);
@@ -215,7 +248,8 @@ const FluidEngine: React.FC = () => {
                         metrics: {
                             logicLatency: logicDuration,
                             uiLatency: uiDuration,
-                            totalLatency: totalDuration
+                            totalLatency: totalDuration,
+                            cached: shouldSkipAgentB
                         }
                     }
                 ];
@@ -225,7 +259,7 @@ const FluidEngine: React.FC = () => {
                 const newState: FluidState = {
                     id: crypto.randomUUID(),
                     uiConfig: uiResultCode,
-                    dataContext: combinedContext,
+                    dataContext: newContext, // Save the Array
                     timestamp: Date.now()
                 };
 
@@ -233,7 +267,7 @@ const FluidEngine: React.FC = () => {
 
                 historyManager.push(newState);
                 setCurrentState(newState);
-                // addLog('System: Render Complete');
+
             } else {
                 // No UI, just update metrics for logic only
                 const totalDuration = Math.round(logicEndTime - startTime);
