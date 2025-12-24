@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { logClientEvent } from "@/app/logging_actions";
 
 const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 const client = new GoogleGenAI({ apiKey: API_KEY });
@@ -77,6 +78,19 @@ const SYSTEM_INSTRUCTION = `
     2. USE 'recharts' for data.
     3. USE 'fluid-ui' <CodeBlock /> for code.
     4. ANIMATION: Use 'animate-glow' on new blocks if their ID matches a "newly added" heuristic (or just indiscriminately on mount if needed, but prefer subtle entry animations).
+
+    ============================================================
+    RESPONSIVE LAYOUT RULES (CRITICAL)
+    ============================================================
+    1. ROOT CONTAINER: Must appear to fill the screen but respect the parent iframe.
+       - Use: <div className="w-full min-h-screen bg-slate-950 text-white p-4 md:p-8">...</div>
+       - DO NOT use 'h-screen' or 'w-screen' (this breaks scrolling).
+       - DO NOT use 'fixed' positioning for main layout containers.
+    2. MOBILE FIRST:
+       - Always use flex-col on mobile, flex-row on desktop (md:flex-row) for side-by-side layouts.
+       - Ensure complex components (charts, tables) have 'overflow-x-auto' wrappers.
+    3. NO HARDCODED MARGINS:
+       - Do NOT use 'ml-64' or similar offsets. The UI runs inside a sandboxed container that handles positioning.
 
     ============================================================
     STRING SYNTAX & SAFETY
@@ -185,6 +199,7 @@ export async function callUIAgent(dataContext: any, previousCode?: string, feedb
     }
 
     // Call Gemini 2.0 Flash
+    const genStartTime = performance.now();
     const response = await client.models.generateContent({
       model: "gemini-3-flash-preview", // Updated to latest model
       contents: [{ role: "user", parts: [{ text: fullInstruction }] }],
@@ -192,6 +207,8 @@ export async function callUIAgent(dataContext: any, previousCode?: string, feedb
         systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] }
       }
     });
+    const genDuration = performance.now() - genStartTime;
+    logClientEvent('Agent B (UI Generation)', genDuration);
 
     const candidate = response.candidates?.[0];
     const text = candidate?.content?.parts?.[0]?.text || "";

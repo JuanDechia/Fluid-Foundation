@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Send, ArrowLeft, ArrowRight, RotateCcw, Plus, MessageSquare, Trash2, AlertTriangle, Wrench, Sparkles, Menu } from 'lucide-react';
+import { Send, ArrowLeft, ArrowRight, RotateCcw, Plus, MessageSquare, Trash2, AlertTriangle, Wrench, Sparkles, Menu, ChevronLeft, PanelLeftOpen } from 'lucide-react';
 import SandboxedRenderer from './SandboxedRenderer';
 import { HistoryManager, type FluidState } from '@/lib/fluid/history_manager';
 import { callLogicAgent, type ChatMessage, type DataBlock } from '@/lib/fluid/agents/agent_logic';
@@ -16,6 +16,7 @@ import {
     getLatestState,
     type SerializedConversation
 } from '@/app/editor/actions';
+import { logClientEvent } from '@/app/logging_actions';
 
 const historyManager = new HistoryManager();
 
@@ -40,6 +41,7 @@ const FluidEngine: React.FC = () => {
 
     // UI State
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(true); // Default open
     const [collapsedWidth, setCollapsedWidth] = useState(320); // Width of sidebar
 
     // Load Conversations List
@@ -179,6 +181,7 @@ const FluidEngine: React.FC = () => {
             );
             const logicEndTime = performance.now();
             const logicDuration = Math.round(logicEndTime - startTime);
+            logClientEvent('FluidEngine - Agent A (Logic)', logicDuration);
 
             // Save Agent Message (Text Only)
             await addMessage(conversationId, 'model', textResponse);
@@ -274,6 +277,8 @@ const FluidEngine: React.FC = () => {
                 const uiEndTime = performance.now();
                 const uiDuration = Math.round(uiEndTime - uiStartTime);
                 const totalDuration = Math.round(uiEndTime - startTime);
+                logClientEvent('FluidEngine - Agent B (UI)', uiDuration, { skipped: shouldSkipAgentB });
+                logClientEvent('FluidEngine - Total E2E', totalDuration);
 
                 // Update Local History with FULL metrics
                 const finalHistory: ChatMessage[] = [
@@ -307,6 +312,7 @@ const FluidEngine: React.FC = () => {
             } else {
                 // No UI, just update metrics for logic only
                 const totalDuration = Math.round(logicEndTime - startTime);
+                logClientEvent('FluidEngine - Total E2E (Logic Only)', totalDuration);
                 const finalHistory: ChatMessage[] = [
                     ...tempHistory,
                     {
@@ -368,7 +374,8 @@ const FluidEngine: React.FC = () => {
     return (
         <div className="flex h-full bg-black text-white overflow-hidden font-sans">
             {/* Sidebar */}
-            <div className="w-[350px] border-r border-slate-800 flex flex-col bg-slate-950 flex-shrink-0 relative z-20">
+            <div className={`border-r border-slate-800 flex flex-col bg-slate-950 flex-shrink-0 relative z-20 transition-all duration-300 ease-in-out ${isChatOpen ? 'w-full md:w-[350px] translate-x-0' : 'w-0 -translate-x-full md:translate-x-0 cursor-none opacity-0 pointer-events-none border-none overflow-hidden'
+                }`}>
 
                 {/* Header Actions */}
                 <div className="p-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center z-30 relative">
@@ -382,15 +389,24 @@ const FluidEngine: React.FC = () => {
                         </button>
                         <span className="font-bold text-sm text-slate-200">Fluid Interface</span>
                     </div>
-                    <button
-                        onClick={() => {
-                            setActiveConversationId(null);
-                            setIsHistoryOpen(false);
-                        }}
-                        className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-medium"
-                    >
-                        <Plus size={14} /> New Chat
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                setActiveConversationId(null);
+                                setIsHistoryOpen(false);
+                            }}
+                            className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors font-medium"
+                        >
+                            <Plus size={14} /> <span className="hidden sm:inline">New Chat</span>
+                        </button>
+                        <button
+                            onClick={() => setIsChatOpen(false)}
+                            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors md:hidden"
+                            title="Hide Chat"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Drawer: History Panel */}
@@ -529,10 +545,19 @@ const FluidEngine: React.FC = () => {
             </div>
 
             {/* Main Stage */}
-            <div className="flex-1 flex flex-col bg-slate-900 relative">
+            <div className="flex-1 flex flex-col bg-slate-900 relative min-w-0">
                 {/* Navigation Toolbar */}
                 <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-4 bg-slate-950 justify-between">
                     <div className="flex items-center gap-2">
+                        {!isChatOpen && (
+                            <button
+                                onClick={() => setIsChatOpen(true)}
+                                className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-blue-400 transition-colors md:hidden mr-2"
+                                title="Show Chat"
+                            >
+                                <PanelLeftOpen size={20} />
+                            </button>
+                        )}
                         <button
                             onClick={() => traverse('back')}
                             disabled={!historyManager.canGoBack()}
@@ -620,7 +645,7 @@ const FluidEngine: React.FC = () => {
                 )}
 
                 {/* Canvas */}
-                <div className="flex-1 overflow-hidden relative flex">
+                <div className="flex-1 overflow-hidden relative flex min-w-0">
                     {currentState ? (
                         <>
                             <div className={`transition-all duration-300 ${showDebug ? 'w-1/2' : 'w-full'} h-full`}>

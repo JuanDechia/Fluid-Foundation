@@ -14,7 +14,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className="h-screen w-screen overflow-hidden flex flex-col">
+        <body className="h-[100dvh] w-full overflow-hidden flex flex-col">
           <header className="flex-none flex justify-between items-center p-4 gap-4 h-16 bg-slate-900 text-white z-50">
             <div className="font-bold text-xl">Foundation</div>
             <div className="flex gap-4 items-center">

@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type, FunctionDeclaration, Part, Content, FunctionCallingConfigMode } from "@google/genai";
+import { logClientEvent } from "@/app/logging_actions";
 
 const render_interface_tool: FunctionDeclaration = {
     name: "render_interface",
@@ -105,6 +106,7 @@ export async function callLogicAgent(
 
         // PHASE 1: SEARCH DISCOVERY
         // We first ask the "Researcher" persona if they need to search the web.
+        const searchStartTime = performance.now();
         const searchResponse = await client.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: [
@@ -128,6 +130,8 @@ export async function callLogicAgent(
                 toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } }
             }
         });
+        const searchDuration = performance.now() - searchStartTime;
+        logClientEvent('Agent A - Phase 1 (Search)', searchDuration);
 
         const searchCandidate = searchResponse.candidates?.[0];
         const searchParts = searchCandidate?.content?.parts || [];
@@ -169,6 +173,7 @@ export async function callLogicAgent(
             `;
         }
 
+        const renderStartTime = performance.now();
         const renderResponse = await client.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: [
@@ -181,6 +186,8 @@ export async function callLogicAgent(
                 toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } }
             }
         });
+        const renderDuration = performance.now() - renderStartTime;
+        logClientEvent('Agent A - Phase 2 (Render)', renderDuration);
 
         const renderCandidate = renderResponse.candidates?.[0];
         const renderParts = renderCandidate?.content?.parts || [];

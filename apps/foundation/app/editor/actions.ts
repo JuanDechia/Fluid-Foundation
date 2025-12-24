@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserContext } from '@/lib/authorization';
 import { FluidConversation, FluidMessage, FluidState, Prisma } from '@prisma/client';
+import { appendLog } from '@/lib/logger';
 
 export type SerializedConversation = {
     id: string;
@@ -28,12 +29,14 @@ export async function getConversations(): Promise<SerializedConversation[]> {
         conditions.push({ organizationId: orgId });
     }
 
+    const start = performance.now();
     const conversations = await prisma.fluidConversation.findMany({
         where: {
             OR: conditions
         },
         orderBy: { updatedAt: 'desc' },
     });
+    appendLog('DB - getConversations', performance.now() - start);
 
     return conversations.map(c => ({
         id: c.id,
@@ -105,10 +108,12 @@ export async function getMessages(conversationId: string): Promise<SerializedMes
     });
     if (!conversation) return [];
 
+    const start = performance.now();
     const messages = await prisma.fluidMessage.findMany({
         where: { conversationId },
         orderBy: { timestamp: 'asc' }
     });
+    appendLog('DB - getMessages', performance.now() - start);
 
     return messages.map(m => ({
         id: m.id,
@@ -138,6 +143,7 @@ export async function addMessage(conversationId: string, role: string, content: 
     });
     if (conversation === 0) throw new Error('Conversation not found');
 
+    const start = performance.now();
     await prisma.fluidMessage.create({
         data: {
             conversationId,
@@ -145,6 +151,7 @@ export async function addMessage(conversationId: string, role: string, content: 
             content,
         }
     });
+    appendLog('DB - addMessage', performance.now() - start);
 
     // Update conversation timestamp
     await prisma.fluidConversation.update({
@@ -173,6 +180,7 @@ export async function saveState(conversationId: string, uiConfig: string, dataCo
     });
     if (conversation === 0) throw new Error('Conversation not found');
 
+    const start = performance.now();
     await prisma.fluidState.create({
         data: {
             conversationId,
@@ -180,6 +188,7 @@ export async function saveState(conversationId: string, uiConfig: string, dataCo
             dataContext,
         }
     });
+    appendLog('DB - saveState', performance.now() - start);
 }
 
 export async function getLatestState(conversationId: string) {

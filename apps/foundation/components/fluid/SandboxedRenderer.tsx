@@ -72,8 +72,10 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
           </script>
 
           <style>
-            body { background-color: #0f172a; color: white; margin: 0; padding: 0; font-family: sans-serif; height: 100vh; width: 100vw; overflow-y: auto; overflow-x: hidden; }
-            #root { height: 100%; width: 100%; }
+            * { box-sizing: border-box; }
+            html { width: 100%; height: 100%; margin: 0; padding: 0; max-width: 100%; }
+            body { background-color: #0f172a; color: white; margin: 0; padding: 0; font-family: sans-serif; height: 100%; width: 100%; max-width: 100%; overflow-y: auto; overflow-x: hidden; }
+            #root { height: 100%; width: 100%; max-width: 100%; }
             /* Scrollbar styling */
             ::-webkit-scrollbar { width: 8px; height: 8px; }
             ::-webkit-scrollbar-track { background: #0f172a; }
@@ -224,7 +226,7 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
   return (
     <iframe
       ref={iframeRef}
-      className="w-full h-full border-none bg-slate-950"
+      className="w-full h-full border-none bg-slate-950 max-w-full"
       title="Fluid Canvas"
     />
   );
