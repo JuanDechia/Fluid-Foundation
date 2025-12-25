@@ -34,7 +34,7 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
           <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
           
           <script>
-            // Error Capture Hook
+            // --- Error & Output Capture ---
             window.onerror = function(msg, url, line, col, error) {
               window.parent.postMessage({ 
                 type: 'SANDBOX_ERROR', 
@@ -47,7 +47,6 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
               window.originalConsoleError = console.error;
               console.error = function(...args) {
                 window.originalConsoleError.apply(console, args);
-                // Simple serialization of args
                 const message = args.map(a => 
                   typeof a === 'object' ? JSON.stringify(a) : String(a)
                 ).join(' ');
@@ -58,6 +57,82 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
                 }, '*');
               };
             }
+
+            // --- PYTHON ENGINE (Lazy Load) ---
+            window.pyodide = null;
+            window.pyodideLoadingPromise = null;
+
+            async function loadPyodideEngine() {
+                if (window.pyodide) return window.pyodide;
+                
+                if (window.pyodideLoadingPromise) {
+                    return window.pyodideLoadingPromise;
+                }
+
+                window.parent.postMessage({ type: 'PYTHON_STATUS', payload: { status: 'BOOTING' } }, '*');
+
+                window.pyodideLoadingPromise = new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js";
+                    script.onload = async () => {
+                        try {
+                            const pyodide = await loadPyodide();
+                            // Redirect stdout
+                            pyodide.setStdout({
+                                batched: (msg) => {
+                                    window.parent.postMessage({ type: 'PYTHON_OUTPUT', payload: { output: msg } }, '*');
+                                }
+                            });
+                            window.pyodide = pyodide;
+                            window.parent.postMessage({ type: 'PYTHON_STATUS', payload: { status: 'READY' } }, '*');
+                            resolve(pyodide);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    };
+                    script.onerror = (e) => reject(new Error("Failed to load Pyodide script"));
+                    document.head.appendChild(script);
+                });
+
+                return window.pyodideLoadingPromise;
+            }
+
+            // --- FLUID BRIDGE ---
+            window.fluid = {
+                runPython: async (code) => {
+                    try {
+                        let outputBuffer = [];
+                        const pyodide = await loadPyodideEngine();
+                        
+                        // Temporarily override stdout for this specific run to capture output
+                        pyodide.setStdout({
+                            batched: (msg) => {
+                                outputBuffer.push(msg);
+                                // Also stream it to parent if needed
+                                window.parent.postMessage({ type: 'PYTHON_OUTPUT', payload: { output: msg } }, '*');
+                            }
+                        });
+
+                        window.parent.postMessage({ type: 'PYTHON_STATUS', payload: { status: 'RUNNING' } }, '*');
+                        
+                        await pyodide.loadPackagesFromImports(code);
+                        const result = await pyodide.runPythonAsync(code);
+                        
+                        // Combine buffer with result
+                        const finalOutput = outputBuffer.join('\\n') + (result !== undefined ? '\\n' + String(result) : '');
+
+                        window.parent.postMessage({ type: 'PYTHON_STATUS', payload: { status: 'IDLE' } }, '*');
+                        return finalOutput.trim();
+                    } catch (err) {
+                        window.parent.postMessage({ 
+                            type: 'PYTHON_ERROR', 
+                            payload: { message: err.message } 
+                        }, '*');
+                        window.parent.postMessage({ type: 'PYTHON_STATUS', payload: { status: 'ERROR' } }, '*');
+                        throw err;
+                    }
+                }
+            };
           </script>
           
           <script type="importmap">
@@ -159,7 +234,8 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
               try {
                 // 0. Pre-compile CodeBlock
                 // We compile it once and store the component reference
-                const codeBlockTranspiled = Babel.transform(CODE_BLOCK_SOURCE, {
+                // Note: Babel is globally available from the script tag in head
+                const codeBlockTranspiled = window.Babel.transform(CODE_BLOCK_SOURCE, {
                     presets: ['env', 'react']
                 }).code;
                 
@@ -173,7 +249,7 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
 
                 // 1. Transpile the user's code
                 // We use 'env' preset to transform imports to CommonJS (require quotes)
-                const transpiled = Babel.transform(RAW_CODE, { 
+                const transpiled = window.Babel.transform(RAW_CODE, { 
                     presets: ['env', 'react'], 
                     filename: 'dynamic.js' 
                 }).code;

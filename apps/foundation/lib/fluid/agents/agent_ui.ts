@@ -63,6 +63,71 @@ const SYSTEM_INSTRUCTION = `
        - You MUST add 'className="... animate-glow"' to ANY component, section, or card that is NEW or has SIGNIFICANTLY CHANGED CONTENT.
     9. Do NOT output markdown code blocks. Just the raw code.
     10. Ensure the code is valid JSX/ES6. TEST your strings mentally before outputting.
+
+    ============================================================
+    PYTHON EXECUTION & INTERACTIVE COMPUTE
+    ============================================================
+    TRIGGER CONDITIONS:
+    1. A content block has \`type: 'code_executable'\`
+    2. OR: Any block contains Python code (look for \`language='python'\` or \`def functions\`).
+
+    You MUST RENDER A "CODE RUNNER CARD" for ANY standalone Python script.
+    DO NOT just display it. MAKE IT RUNNABLE.
+
+    You MUST RENDER A "CODE RUNNER CARD" in either case.
+
+    COMPONENT STRUCTURE:
+    - Container: similar to a CodeBlock but with controls.
+    - Header: "Python Console" badge.
+    - Code Display: Use <CodeBlock code={block.content} language="python" /> (If content is mixed text, EXTRACT the code).
+    - Controls: A "▶ Run Code" button.
+      - STYLE: bg-green-600 hover:bg-green-500 text-white font-mono text-xs px-3 py-1 rounded flex items-center gap-2.
+      - ICON: <Play size={14} /> (Import from lucide-react)
+    - COMPUTE BRIDGE (CRITICAL):
+      - ON CLICK: Call \`window.fluid.runPython(code)\`
+      - ASYNC HANDLING: This function is ASYNC. You MUST show a loading spinner while awaiting it.
+      - OUTPUT: The result will be returned. Display it in a <pre> console area below the code.
+      - CONSOLE LOGS: Listen for window messages or just display the return value.
+
+    EXAMPLE IMPLEMENTATION PATTERN:
+    \`\`\`jsx
+    const CodeRunner = ({ code }) => {
+       const [output, setOutput] = useState(null);
+       const [status, setStatus] = useState('idle'); // idle, running, error
+
+       const run = async () => {
+          setStatus('running');
+          setOutput(null);
+          try {
+             // The bridge handles the heavy lifting
+             const result = await window.fluid.runPython(code); 
+             setOutput(result);
+             setStatus('success');
+          } catch (err) {
+             setOutput(err.message);
+             setStatus('error');
+          }
+       };
+
+       return (
+          <div className="border border-slate-700 bg-slate-900 rounded-lg overflow-hidden my-4">
+             <div className="flex items-center justify-between px-4 py-2 bg-slate-800">
+                <span className="text-xs text-slate-400 font-mono">PYTHON 3.11 (WASM)</span>
+                <button onClick={run} disabled={status === 'running'} className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-2 text-xs hover:bg-green-500 disabled:opacity-50">
+                   {status === 'running' ? <Loader2 className="animate-spin" size={14}/> : <Play size={14} />}
+                   Run Code
+                </button>
+             </div>
+             <CodeBlock code={code} language="python" />
+             {output && (
+                <div className="p-4 border-t border-slate-700 bg-black font-mono text-xs text-green-400 whitespace-pre-wrap">
+                   {output}
+                </div>
+             )}
+          </div>
+       );
+    };
+    \`\`\`
     11. DEFENSIVE CODING & NULL SAFETY:
         - NEVER call string methods (toLowerCase, split, etc.) on data properties without checking if they exist.
         - Example: \`block.insight_type && block.insight_type.toLowerCase()\` instead of just \`block.insight_type.toLowerCase()\`

@@ -20,17 +20,20 @@ const render_interface_tool: FunctionDeclaration = {
                 items: {
                     type: Type.OBJECT,
                     properties: {
+                        type: {
+                            type: Type.STRING,
+                            description: "Block type: 'text', 'code', or 'code_executable'.",
+                            enum: ["text", "code", "code_executable"]
+                        },
                         title: { type: Type.STRING },
-                        content: { type: Type.STRING, description: "The main text or data content." },
+                        content: { type: Type.STRING, description: "The text content or code string." },
+                        language: { type: Type.STRING, description: "Language for code blocks (e.g., 'python')." },
+                        description: { type: Type.STRING, description: "Description or purpose of the code." },
                         insight_type: { type: Type.STRING, description: "Type of insight (e.g., 'Analyst Note', 'Warning')." },
                         insight_value: { type: Type.STRING, description: "The specific insight text." },
                     },
-                    required: ["title", "content", "insight_type", "insight_value"],
+                    required: ["title", "content"],
                 },
-            },
-            raw_data: {
-                type: Type.STRING,
-                description: "Optional raw data for code snippets, CSVs, or complex datasets.",
             },
         },
         required: ["title", "summary", "content_blocks"],
@@ -54,7 +57,30 @@ GENERAL RULES:
 - Always use up-to-date information.
 - Use your 'googleSearch' tool for current events, news, or specific real-time data.
 - Provide high-quality insights in the 'insight_value' fields of the tool.
-- If asking for code, put the full code in 'raw_data' or a content block.`;
+- If asking for code, put the full code in 'raw_data' or a content block.
+
+- INTERNAL PYTHON COMPUTE:
+  - If the user asks for a calculation, simulation, data transformation, or complex logic:
+  - DO NOT just explain it.
+  - WRITE a Python script to SOLVE it.
+  - Output a content block with \`type: 'code_executable'\` and \`language: 'python'\`.
+  - The UI will run this script locally for the user.
+
+  EXAMPLE JSON OUTPUT for a calculation request:
+  {
+      "title": "Fibonacci Calculation",
+      "summary": "I have generated a Python script to calculate the sequence.",
+      "content_blocks": [
+          {
+              "type": "code_executable",
+              "title": "Python Generator",
+              "language": "python",
+              "content": "def fib(n): ... print(fib(20))",
+              "description": "Calculates the first 20 numbers."
+          }
+      ]
+  }
+`;
 
 // Maintained for compatibility with FluidEngine (which expects strings)
 export interface ChatMessage {
