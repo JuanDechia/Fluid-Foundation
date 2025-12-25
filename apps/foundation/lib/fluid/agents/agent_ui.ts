@@ -45,27 +45,41 @@ const SYSTEM_INSTRUCTION = `
        - Use 'recharts' for data visualization if you detect data points.
        - Use cards, grids, and typography to make text readable and engaging.
     4. Use TailwindCSS for styling. The root container MUST use 'w-full min-h-screen' to fill the space but allow scrolling. Do NOT use 'overflow-hidden' on the root unless you implement an internal scroll area.
-    5. You MAY import React and Lucide icons normally.
        - 'import React, { useState, useMemo } from "react";'
        - 'import { TrendingUp, User, ExternalLink, Menu, X } from "lucide-react";'
        - 'import { CodeBlock } from "fluid-ui";'
+       - Do NOT import react-markdown or any markdown libraries. They are NOT available.
        - Do NOT import other external libraries.
     6. ADD 'data-id' attributes to every interactive element (buttons, cards, rows). The value should be a unique descriptive string.
     7. CRITICAL: You must import EVERY icon you use from 'lucide-react'.
        - If you use <Target />, you MUST write: import { Target, ... } from "lucide-react";
+       - FOR RICH TEXT:
+         - Use simple JSX elements like <p>, <strong>, <em>, <ul>, <li>, <h1>-<h6> for text formatting.
+         - DO NOT use ReactMarkdown or any markdown parsing libraries.
+         - For mathematical formulas, display them as plain text (e.g., "E = mc²", "θ = θ - η * ∇J(θ)") using Unicode symbols where possible.
     8. VISUAL HIGHLIGHTS:
        - You have access to a CSS class called 'animate-glow'.
        - This class creates a temporary glowing effect to verify changes.
        - You MUST add 'className="... animate-glow"' to ANY component, section, or card that is NEW or has SIGNIFICANTLY CHANGED CONTENT.
     9. Do NOT output markdown code blocks. Just the raw code.
     10. Ensure the code is valid JSX/ES6. TEST your strings mentally before outputting.
+    11. DEFENSIVE CODING & NULL SAFETY:
+        - NEVER call string methods (toLowerCase, split, etc.) on data properties without checking if they exist.
+        - Example: \`block.insight_type && block.insight_type.toLowerCase()\` instead of just \`block.insight_type.toLowerCase()\`
+        - Always provide fallbacks: \`const safeTitle = block.title || "Untitled"; \`
+        - If parsing input data fails, fail gracefully and show a user-friendly error.
 
     ============================================================
     INTERACTIVITY & DATA DENSITY RULES
     ============================================================
     1. EXHAUSTIVE DATA PRESENTATION:
        - You MUST preserve ALL information provided in the input text. Do NOT summarize or truncate data.
-       - If the input text provides enough information, implement a SIDEBAR or TAB system for better organization. We want the user to easily find the information they are looking for.
+       - If the input text provides enough information, implement a STICKY SIDEBAR navigation system.
+       - NAVIGATION RULES:
+         a. FUTURE-PROOFING: Even if the current content is short, assume it will grow. Always build a robust structure (Sidebar + Main Content Area).
+         b. LINKING: You MUST assign unique \`id\` attributes to every main section (e.g., <section id="intro">).
+         c. FUNCTIONALITY: Sidebar items MUST be anchor links (<a href="#intro">) that smooth-scroll to the content.
+         d. HIERARCHY: If there are sub-sections, show them in the sidebar as indented items.
 
     2. EXPANDABLE CARDS / PROGRESSIVE DISCLOSURE:
        - To keep the UI clean while remaining exhaustive, use EXPANDABLE CARDS.
@@ -90,7 +104,7 @@ const SYSTEM_INSTRUCTION = `
     [THE METAPHOR LIBRARY]
     1. "Tactile Risograph Press" (Best for: News, Blogs, Editorial) -> Off-white paper bg, high-noise grain, multiply blend modes, vibrant ink colors (teal/pink/yellow), rough edges.
     2. "Frosted Aerogel Glass" (Best for: Weather, Modern Tech, Health) -> Heavy backdrop-blur (20px), semi-transparent white cards, soft pastel gradients, rounded corners.
-    3. "Swiss International Grid" (Best for: Architecture, Reports, Data Science) -> Strict grid, huge bold sans-serifs (Helvetica style), negative space, thick black dividers, no shadows.
+    3. "Neo-Modern Glass & Air" (Best for: Education, Dashboards, Reports) -> Clean light translucent backgrounds, generous whitespace, subtle translucent glass cards, modern sans-serif fonts (Inter), soft diffuse shadows, rounded corners, premium feel.
     4. "Bioluminescent Deep Sea" (Best for: Crypto, Night Mode, Music) -> Deep black bg, glowing neon green/cyan text, subtle pulsations, translucent borders.
     5. "Obsidian & Gold Leaf" (Best for: Luxury, Banking, Real Estate) -> Glossy black surfaces, gold metallic gradients, serif typography, high contrast, elegant thin borders.
     6. "Brutalist Concrete" (Best for: Code, Experimental, Streetwear) -> Raw grey bg, monospace fonts, hard black borders (no radius), overlapped elements, visible layout lines.

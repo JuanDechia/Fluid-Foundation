@@ -64,9 +64,11 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
             {
               "imports": {
                 "react": "https://esm.sh/react@18.2.0",
+                "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+                "react/jsx-dev-runtime": "https://esm.sh/react@18.2.0/jsx-dev-runtime",
                 "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
                 "react-dom": "https://esm.sh/react-dom@18.2.0",
-                "recharts": "https://esm.sh/recharts@2.12.0"
+                "recharts": "https://esm.sh/recharts@2.12.0?external=react,react-dom"
               }
             }
           </script>
@@ -101,7 +103,7 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
             import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
             import * as Lucide from 'https://esm.sh/lucide-react@0.344.0?external=react';
             import { Copy, Check } from 'https://esm.sh/lucide-react@0.344.0?external=react';
-            import * as Recharts from 'https://esm.sh/recharts@2.12.0?external=react';
+            import * as Recharts from 'https://esm.sh/recharts@2.12.0?external=react,react-dom';
 
             const DATA_CONTEXT = ${JSON.stringify(data).replace(/<\/script>/g, '<\\/script>')};
             
@@ -149,8 +151,8 @@ const SandboxedRenderer: React.FC<SandboxedRendererProps> = ({ code, data }) => 
                 if (moduleName === 'react') return React;
                 if (moduleName === 'lucide-react') return Lucide;
                 if (moduleName === 'recharts') return Recharts;
-                if (moduleName === 'fluid-ui') return { CodeBlock: window.CodeBlockComponent }; // We will register this globally or in scope
-                throw new Error(\`Cannot find module '\${moduleName}'\`);
+                if (moduleName === 'fluid-ui') return { CodeBlock: window.CodeBlockComponent };
+                throw new Error(\`Cannot find module '\${moduleName}'. Only react, lucide-react, recharts, and fluid-ui are available.\`);
             };
 
             async function run() {

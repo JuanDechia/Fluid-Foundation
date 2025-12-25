@@ -4,6 +4,7 @@ export const metadata = {
 }
 
 import './globals.css'
+import 'katex/dist/katex.min.css'
 import { ClerkProvider, SignInButton, SignedIn, SignedOut, UserButton, OrganizationSwitcher } from '@clerk/nextjs'
 
 export default function RootLayout({
